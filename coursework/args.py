@@ -300,6 +300,11 @@ def argument_parser():
     parser.add_argument(
         "--save-dir", type=str, default="log", help="path to save log and model weights"
     )
+    parser.add_argument(
+        "--save-checkpoint",
+        action="store_true",
+        help="save model checkpoints during training",
+    )
     parser.add_argument("--use-cpu", action="store_true", help="use cpu")
     parser.add_argument(
         "--gpu-devices",

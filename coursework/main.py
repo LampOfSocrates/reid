@@ -284,16 +284,17 @@ def main():
                     }
                 )
 
-            save_checkpoint(
-                {
-                    "state_dict": model.state_dict(),
-                    "rank1": eval_metrics["rank1"],
-                    "epoch": epoch + 1,
-                    "arch": args.arch,
-                    "optimizer": optimizer.state_dict(),
-                },
-                args.save_dir,
-            )
+            if args.save_checkpoint:
+                save_checkpoint(
+                    {
+                        "state_dict": model.state_dict(),
+                        "rank1": eval_metrics["rank1"],
+                        "epoch": epoch + 1,
+                        "arch": args.arch,
+                        "optimizer": optimizer.state_dict(),
+                    },
+                    args.save_dir,
+                )
 
     elapsed = round(time.time() - time_start)
     elapsed = str(datetime.timedelta(seconds=elapsed))
