@@ -1,4 +1,5 @@
 import argparse
+from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import sys
@@ -20,9 +21,12 @@ def is_notebook():
         return False      # Probably standard Python interpreter
 
 def plot_metrics(csv_path, output_png="training_metrics.png"):
-    if not os.path.exists(csv_path):
+    csv_path = Path(csv_path)
+    output_png = Path(output_png)
+
+    if not csv_path.exists():
         print(f"Error: {csv_path} not found.")
-        return
+        return None
 
     # 1. Read the metrics CSV
     df = pd.parse_csv(csv_path) if hasattr(pd, "parse_csv") else pd.read_csv(csv_path)
@@ -48,8 +52,11 @@ def plot_metrics(csv_path, output_png="training_metrics.png"):
         print("Detected Jupyter Notebook environment. Rendering plot on screen...")
         plt.show()
     else:
+        output_png.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(output_png)
         print(f"Plot saved to {output_png}")
+    plt.close()
+    return output_png
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Plot Training Metrics")
