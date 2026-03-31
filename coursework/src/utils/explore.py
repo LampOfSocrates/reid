@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -58,6 +59,23 @@ def _resolve_query_and_gallery(root: str | Path):
     return query_files, gallery_files
 
 
+def _format_image_label(prefix: str, img_path: Path, index: int | None = None, width: int = 18) -> str:
+    stem_parts = img_path.stem.split("_")
+    camera_text = ""
+    if len(stem_parts) >= 2 and stem_parts[1].startswith("c"):
+        camera_text = f"Camera: {stem_parts[1]}"
+
+    header = prefix if index is None else f"{prefix} {index}"
+    lines = [header, f"File: {img_path.name}"]
+    if camera_text:
+        lines.append(camera_text)
+
+    wrapped_lines = []
+    for line in lines:
+        wrapped_lines.extend(textwrap.wrap(line, width=width) or [""])
+    return "\n".join(wrapped_lines)
+
+
 def show_veri_good_and_junk(
     root: str | Path,
     query_index: int,
@@ -74,8 +92,8 @@ def show_veri_good_and_junk(
     Show the query image together with its good and junk gallery matches.
     """
     root = Path(root)
-    gt_file = Path(gt_file) if gt_file else root / "gt_index_776.txt"
-    jk_file = Path(jk_file) if jk_file else root / "jk_index_776.txt"
+    gt_file = Path(gt_file) if gt_file else root / "gt_index.txt"
+    jk_file = Path(jk_file) if jk_file else root / "jk_index.txt"
 
     if not gt_file.exists():
         raise FileNotFoundError(f"Missing gt file: {gt_file}")
@@ -111,27 +129,81 @@ def show_veri_good_and_junk(
     if ncols == 1:
         axes = axes.reshape(2, 1)
 
+    fig.suptitle(
+        "VeRi Query With Good And Junk Matches",
+        fontsize=24,
+        fontweight="bold",
+        y=0.98,
+    )
+    fig.text(
+        0.5,
+        0.93,
+        "Top row: query with good matches    |    Bottom row: query with junk matches",
+        ha="center",
+        va="center",
+        fontsize=16,
+        fontweight="semibold",
+    )
+    fig.text(
+        0.02,
+        0.79,
+        "GOOD MATCHES",
+        ha="left",
+        va="center",
+        fontsize=18,
+        fontweight="bold",
+    )
+    fig.text(
+        0.02,
+        0.37,
+        "JUNK MATCHES",
+        ha="left",
+        va="center",
+        fontsize=18,
+        fontweight="bold",
+    )
+
     for axis in axes.ravel():
         axis.axis("off")
 
     query_img = Image.open(query_file).convert("RGB")
     axes[0, 0].imshow(query_img)
-    axes[0, 0].set_title(f"QUERY\n{query_file.name}", fontsize=10)
+    axes[0, 0].set_title(
+        _format_image_label("QUERY", query_file, width=24),
+        fontsize=14,
+        fontweight="bold",
+        pad=16,
+    )
 
     for offset, img_path in enumerate(good_files, start=1):
         image = Image.open(img_path).convert("RGB")
         axes[0, offset].imshow(image)
-        axes[0, offset].set_title(f"GOOD {offset}\n{img_path.name}", fontsize=10)
+        axes[0, offset].set_title(
+            _format_image_label("GOOD", img_path, index=offset, width=24),
+            fontsize=13,
+            fontweight="bold",
+            pad=16,
+        )
 
     axes[1, 0].imshow(query_img)
-    axes[1, 0].set_title(f"QUERY\n{query_file.name}", fontsize=10)
+    axes[1, 0].set_title(
+        _format_image_label("QUERY", query_file, width=24),
+        fontsize=14,
+        fontweight="bold",
+        pad=16,
+    )
 
     for offset, img_path in enumerate(junk_files, start=1):
         image = Image.open(img_path).convert("RGB")
         axes[1, offset].imshow(image)
-        axes[1, offset].set_title(f"JUNK {offset}\n{img_path.name}", fontsize=10)
+        axes[1, offset].set_title(
+            _format_image_label("JUNK", img_path, index=offset, width=24),
+            fontsize=13,
+            fontweight="bold",
+            pad=16,
+        )
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0.02, 0.04, 1.0, 0.9], h_pad=3.0, w_pad=2.0)
     if show_plot:
         plt.show()
     else:
