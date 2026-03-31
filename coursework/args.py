@@ -113,6 +113,16 @@ def argument_parser():
         action="store_true",
         help="randomly alter the intensities of RGB channels",
     )
+    parser.add_argument(
+        "--crop-aug",
+        action="store_true",
+        help="apply an additional random crop augmentation during training",
+    )
+    parser.add_argument(
+        "--blur-aug",
+        action="store_true",
+        help="apply a random gaussian blur augmentation during training",
+    )
 
     # ************************************************************
     # Optimization options
@@ -331,6 +341,8 @@ def dataset_kwargs(parsed_args):
         "random_erase": parsed_args.random_erase,
         "color_jitter": parsed_args.color_jitter,
         "color_aug": parsed_args.color_aug,
+        "crop_aug": parsed_args.crop_aug,
+        "blur_aug": parsed_args.blur_aug,
     }
 
 

@@ -129,6 +129,8 @@ def build_transforms(
     random_erase=False,  # use random erasing for data augmentation
     color_jitter=False,  # randomly change the brightness, contrast and saturation
     color_aug=False,  # randomly alter the intensities of RGB channels
+    crop_aug=False,  # apply an additional random crop during training
+    blur_aug=False,  # apply gaussian blur during training
     **kwargs
 ):
     # use imagenet mean and std as default
@@ -141,10 +143,14 @@ def build_transforms(
     transform_train = []
     transform_train += [Random2DTranslation(height, width)]
     transform_train += [T.RandomHorizontalFlip()]
+    if crop_aug:
+        transform_train += [T.RandomCrop((height, width), padding=10)]
     if color_jitter:
         transform_train += [
             T.ColorJitter(brightness=0.2, contrast=0.15, saturation=0, hue=0)
         ]
+    if blur_aug:
+        transform_train += [T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))]
     transform_train += [T.ToTensor()]
     if color_aug:
         transform_train += [ColorAugmentation()]
