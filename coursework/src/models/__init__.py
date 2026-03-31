@@ -8,6 +8,7 @@ from .resnet import (
     resnet50,
     resnet50_fc512,
 )
+from .clip_senet import clip_senet
 from .tvmodels import mobilenet_v3_small, vgg16
 
 
@@ -19,6 +20,7 @@ __model_factory = {
     "resnet34_fc512": resnet34_fc512,
     "resnet50": resnet50,
     "resnet50_fc512": resnet50_fc512,
+    "clip_senet": clip_senet,
     "mobilenet_v3_small": mobilenet_v3_small,
     "vgg16": vgg16,
 }

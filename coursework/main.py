@@ -1,6 +1,8 @@
 # Copyright (c) EEEM071, University of Surrey
 
 import datetime
+import csv
+import json
 import os
 import os.path as osp
 import sys
@@ -36,6 +38,110 @@ import uuid
 # global variables
 parser = argument_parser()
 args = parser.parse_args()
+_REQUESTED_SAVE_DIR = args.save_dir
+_RUN_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+args.save_dir = f"{args.save_dir}_{_RUN_TIMESTAMP}"
+_COMPARISON_EPOCHS = []
+_COMPARISON_EVALS = []
+
+
+def _write_comparison_outputs(total_elapsed_seconds):
+    comparison_json = osp.join(args.save_dir, "comparison_summary.json")
+    comparison_csv = osp.join(args.save_dir, "comparison_summary.csv")
+
+    avg_epoch_time = (
+        sum(item["epoch_time_seconds"] for item in _COMPARISON_EPOCHS) / len(_COMPARISON_EPOCHS)
+        if _COMPARISON_EPOCHS
+        else 0.0
+    )
+
+    best_rank1 = None
+    best_map = None
+    final_eval = None
+    if _COMPARISON_EVALS:
+        final_eval = _COMPARISON_EVALS[-1]
+        best_rank1 = max(item["rank1"] for item in _COMPARISON_EVALS)
+        best_map = max(item["mAP"] for item in _COMPARISON_EVALS)
+
+    summary = {
+        "requested_save_dir": _REQUESTED_SAVE_DIR,
+        "run_save_dir": args.save_dir,
+        "timestamp": _RUN_TIMESTAMP,
+        "arch": args.arch,
+        "source_names": list(args.source_names),
+        "target_names": list(args.target_names),
+        "root": args.root,
+        "height": args.height,
+        "width": args.width,
+        "optim": args.optim,
+        "lr": args.lr,
+        "max_epoch": args.max_epoch,
+        "train_batch_size": args.train_batch_size,
+        "test_batch_size": args.test_batch_size,
+        "train_sampler": args.train_sampler,
+        "data_fraction": getattr(args, "data_fraction", 1.0),
+        "total_elapsed_seconds": total_elapsed_seconds,
+        "avg_epoch_time_seconds": avg_epoch_time,
+        "best_rank1": best_rank1,
+        "best_mAP": best_map,
+        "final_eval": final_eval,
+        "epoch_summaries": _COMPARISON_EPOCHS,
+        "eval_history": _COMPARISON_EVALS,
+    }
+
+    with open(comparison_json, "w", encoding="utf-8") as handle:
+        json.dump(summary, handle, indent=2)
+
+    with open(comparison_csv, "w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "timestamp",
+                "arch",
+                "source_names",
+                "target_names",
+                "requested_save_dir",
+                "run_save_dir",
+                "lr",
+                "max_epoch",
+                "train_batch_size",
+                "test_batch_size",
+                "train_sampler",
+                "data_fraction",
+                "total_elapsed_seconds",
+                "avg_epoch_time_seconds",
+                "best_rank1",
+                "best_mAP",
+                "final_rank1",
+                "final_mAP",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "timestamp": _RUN_TIMESTAMP,
+                "arch": args.arch,
+                "source_names": ",".join(args.source_names),
+                "target_names": ",".join(args.target_names),
+                "requested_save_dir": _REQUESTED_SAVE_DIR,
+                "run_save_dir": args.save_dir,
+                "lr": args.lr,
+                "max_epoch": args.max_epoch,
+                "train_batch_size": args.train_batch_size,
+                "test_batch_size": args.test_batch_size,
+                "train_sampler": args.train_sampler,
+                "data_fraction": getattr(args, "data_fraction", 1.0),
+                "total_elapsed_seconds": total_elapsed_seconds,
+                "avg_epoch_time_seconds": avg_epoch_time,
+                "best_rank1": best_rank1,
+                "best_mAP": best_map,
+                "final_rank1": final_eval["rank1"] if final_eval else None,
+                "final_mAP": final_eval["mAP"] if final_eval else None,
+            }
+        )
+
+    print(f'Comparison summary saved to "{comparison_json}"')
+    print(f'Comparison summary saved to "{comparison_csv}"')
 
 
 def main():
@@ -58,6 +164,8 @@ def main():
     print("Experiment time:{}".format(time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
     print("==========")
     print(f"==========\nArgs:{args}\n==========")
+    print(f"Requested save dir:{_REQUESTED_SAVE_DIR}")
+    print(f"Run save dir:{args.save_dir}")
 
     if use_gpu:
         print(f"Currently using GPU {args.gpu_devices}")
@@ -131,7 +239,7 @@ def main():
         optimizer.load_state_dict(initial_optim_state)
     """
     for epoch in range(args.start_epoch, args.max_epoch):
-        epoch_elapsed = train(
+        epoch_stats = train(
             epoch,
             model,
             criterion_xent,
@@ -140,7 +248,11 @@ def main():
             trainloader,
             use_gpu,
         )
-        print(f"Epoch {epoch + 1}/{args.max_epoch} finished in {epoch_elapsed:.2f}s")
+        _COMPARISON_EPOCHS.append(epoch_stats)
+        print(
+            f"Epoch {epoch + 1}/{args.max_epoch} finished in "
+            f"{epoch_stats['epoch_time_seconds']:.2f}s"
+        )
 
         scheduler.step()
 
@@ -156,13 +268,26 @@ def main():
                 print(f"Evaluating {name} ...")
                 queryloader = testloader_dict[name]["query"]
                 galleryloader = testloader_dict[name]["gallery"]
-                rank1 = test(model, queryloader, galleryloader, use_gpu)
-                ranklogger.write(name, epoch + 1, rank1)
+                eval_metrics = test(
+                    model,
+                    queryloader,
+                    galleryloader,
+                    use_gpu,
+                    return_metrics=True,
+                )
+                ranklogger.write(name, epoch + 1, eval_metrics["rank1"])
+                _COMPARISON_EVALS.append(
+                    {
+                        "epoch": epoch + 1,
+                        "dataset": name,
+                        **eval_metrics,
+                    }
+                )
 
             save_checkpoint(
                 {
                     "state_dict": model.state_dict(),
-                    "rank1": rank1,
+                    "rank1": eval_metrics["rank1"],
                     "epoch": epoch + 1,
                     "arch": args.arch,
                     "optimizer": optimizer.state_dict(),
@@ -173,6 +298,7 @@ def main():
     elapsed = round(time.time() - time_start)
     elapsed = str(datetime.timedelta(seconds=elapsed))
     print(f"Elapsed {elapsed}")
+    _write_comparison_outputs(time.time() - time_start)
     ranklogger.show_summary()
 
 
@@ -237,7 +363,15 @@ def train(
 
         end = time.time()
 
-    return time.time() - epoch_start
+    return {
+        "epoch": epoch + 1,
+        "epoch_time_seconds": time.time() - epoch_start,
+        "avg_batch_time_seconds": batch_time.avg,
+        "avg_data_time_seconds": data_time.avg,
+        "avg_xent": xent_losses.avg,
+        "avg_htri": htri_losses.avg,
+        "avg_acc": accs.avg,
+    }
 
 
 def test(
@@ -247,6 +381,7 @@ def test(
     use_gpu,
     ranks=[1, 5, 10, 20],
     return_distmat=False,
+    return_metrics=False,
 ):
     batch_time = AverageMeter()
 
@@ -324,6 +459,14 @@ def test(
 
     if return_distmat:
         return distmat
+    if return_metrics:
+        return {
+            "rank1": float(cmc[0]),
+            "rank5": float(cmc[4]) if len(cmc) >= 5 else None,
+            "rank10": float(cmc[9]) if len(cmc) >= 10 else None,
+            "rank20": float(cmc[19]) if len(cmc) >= 20 else None,
+            "mAP": float(mAP),
+        }
     return cmc[0]
 
 
