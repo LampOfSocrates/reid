@@ -1,11 +1,50 @@
 # Copyright (c) EEEM071, University of Surrey
 
 import argparse
+import sys
+
+
+class CourseworkHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    def _format_usage(self, usage, actions, groups, prefix):
+        if usage is not None:
+            usage_text = usage % {"prog": self._prog}
+        else:
+            prog = self._prog
+            action_usage = self._format_actions_usage(actions, groups)
+            usage_text = prog
+            if action_usage:
+                usage_text = f"{prog}\n  {action_usage}"
+
+        return f"usage:\n  {usage_text}\n\n"
+
+    def _format_actions_usage(self, actions, groups):
+        parts = []
+        for action in actions:
+            if action.help is argparse.SUPPRESS:
+                continue
+
+            if action.option_strings:
+                part = self._format_action_invocation(action)
+                if not action.required:
+                    part = f"[{part}]"
+            else:
+                default = self._get_default_metavar_for_positional(action)
+                part = self._format_args(action, default)
+
+            parts.append(part)
+
+        return "\n  ".join(parts)
+
+
+class CourseworkArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        self.print_help(sys.stderr)
+        self.exit(2, f"\n{self.prog}: error: {message}\n")
 
 
 def argument_parser():
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    parser = CourseworkArgumentParser(
+        formatter_class=CourseworkHelpFormatter
     )
 
     # ************************************************************
@@ -195,7 +234,9 @@ def argument_parser():
     # ************************************************************
     # Architecture
     # ************************************************************
-    parser.add_argument("-a", "--arch", type=str, default="resnet50")
+    parser.add_argument(
+        "-a", "--arch", type=str, default="resnet50", help="model architecture"
+    )
     parser.add_argument(
         "--no-pretrained", action="store_true", help="do not load pretrained weights"
     )
@@ -228,7 +269,12 @@ def argument_parser():
         default=800,
         help="test-size for vehicleID dataset, choices=[800,1600,2400]",
     )
-    parser.add_argument("--query-remove", type=bool, default=True)
+    parser.add_argument(
+        "--query-remove",
+        type=bool,
+        default=True,
+        help="whether to remove same-camera matches from query evaluation",
+    )
     # ************************************************************
     # Miscs
     # ************************************************************

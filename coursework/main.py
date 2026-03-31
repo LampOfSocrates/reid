@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
+from tqdm import tqdm
 from args import argument_parser, dataset_kwargs, optimizer_kwargs, lr_scheduler_kwargs
 from src import models
 from src.data_manager import ImageDataManager
@@ -130,7 +131,7 @@ def main():
         optimizer.load_state_dict(initial_optim_state)
     """
     for epoch in range(args.start_epoch, args.max_epoch):
-        train(
+        epoch_elapsed = train(
             epoch,
             model,
             criterion_xent,
@@ -139,6 +140,7 @@ def main():
             trainloader,
             use_gpu,
         )
+        print(f"Epoch {epoch + 1}/{args.max_epoch} finished in {epoch_elapsed:.2f}s")
 
         scheduler.step()
 
@@ -187,8 +189,16 @@ def train(
     for p in model.parameters():
         p.requires_grad = True  # open all layers
 
+    epoch_start = time.time()
     end = time.time()
-    for batch_idx, (imgs, pids, _, _) in enumerate(trainloader):
+    progress = tqdm(
+        enumerate(trainloader),
+        total=len(trainloader),
+        desc=f"Epoch {epoch + 1}/{args.max_epoch}",
+        file=sys.stdout,
+        leave=True,
+    )
+    for batch_idx, (imgs, pids, _, _) in progress:
         data_time.update(time.time() - end)
 
         if use_gpu:
@@ -216,26 +226,18 @@ def train(
         htri_losses.update(htri_loss.item(), pids.size(0))
         accs.update(accuracy(outputs, pids)[0])
 
-        if (batch_idx + 1) % args.print_freq == 0:
-            print(
-                "Epoch: [{0}][{1}/{2}]\t"
-                "Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t"
-                "Data {data_time.val:.4f} ({data_time.avg:.4f})\t"
-                "Xent {xent.val:.4f} ({xent.avg:.4f})\t"
-                "Htri {htri.val:.4f} ({htri.avg:.4f})\t"
-                "Acc {acc.val:.2f} ({acc.avg:.2f})\t".format(
-                    epoch + 1,
-                    batch_idx + 1,
-                    len(trainloader),
-                    batch_time=batch_time,
-                    data_time=data_time,
-                    xent=xent_losses,
-                    htri=htri_losses,
-                    acc=accs,
-                )
+        if (batch_idx + 1) % args.print_freq == 0 or (batch_idx + 1) == len(trainloader):
+            progress.set_postfix(
+                time=f"{batch_time.avg:.3f}s",
+                data=f"{data_time.avg:.4f}s",
+                xent=f"{xent_losses.avg:.4f}",
+                htri=f"{htri_losses.avg:.4f}",
+                acc=f"{accs.avg:.2f}",
             )
 
         end = time.time()
+
+    return time.time() - epoch_start
 
 
 def test(

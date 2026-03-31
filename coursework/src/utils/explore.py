@@ -74,8 +74,8 @@ def show_veri_good_and_junk(
     Show the query image together with its good and junk gallery matches.
     """
     root = Path(root)
-    gt_file = Path(gt_file) if gt_file else root / "gt_index.txt"
-    jk_file = Path(jk_file) if jk_file else root / "jk_index.txt"
+    gt_file = Path(gt_file) if gt_file else root / "gt_index_776.txt"
+    jk_file = Path(jk_file) if jk_file else root / "jk_index_776.txt"
 
     if not gt_file.exists():
         raise FileNotFoundError(f"Missing gt file: {gt_file}")
