@@ -77,6 +77,20 @@ def _format_image_label(prefix: str, img_path: Path, index: int | None = None, w
     return "\n".join(wrapped_lines)
 
 
+def _extract_image_metadata(img_path: Path) -> list[str]:
+    stem_parts = img_path.stem.split("_")
+    metadata = [f"File: {img_path.name}"]
+
+    if stem_parts:
+        metadata.append(f"Vehicle: {stem_parts[0]}")
+    if len(stem_parts) >= 2 and stem_parts[1].startswith("c"):
+        metadata.append(f"Camera: {stem_parts[1]}")
+    if len(stem_parts) >= 3:
+        metadata.append(f"Frame: {stem_parts[2]}")
+
+    return metadata
+
+
 def _draw_image_grid(
     fig,
     grid_spec,
@@ -123,32 +137,36 @@ def _draw_image_grid(
         cell = image_grid[slot // cols, slot % cols].subgridspec(
             2,
             1,
-            height_ratios=[0.8, 0.2],
-            hspace=0.08,
+            height_ratios=[0.9, 0.1],
+            hspace=0.02,
         )
         image_ax = fig.add_subplot(cell[0])
         text_ax = fig.add_subplot(cell[1])
         image_ax.axis("off")
-        text_ax.axis("off")
         if slot >= len(image_paths):
+            text_ax.axis("off")
             continue
 
         img_path = image_paths[slot]
         image = Image.open(img_path).convert("RGB")
         image_ax.imshow(image)
+        image_ax.set_box_aspect(image.height / image.width)
+        heading = label_prefix if label_prefix == "QUERY" else f"{label_prefix} {slot + 1}"
+        metadata_lines = [heading, *_extract_image_metadata(img_path)]
+        wrapped_lines = []
+        for index, line in enumerate(metadata_lines):
+            width = 20 if index == 0 else 28
+            wrapped_lines.extend(textwrap.wrap(line, width=width) or [""])
+        text_ax.axis("off")
         text_ax.text(
-            0.5,
-            0.98,
-            _format_image_label(
-                label_prefix,
-                img_path,
-                index=slot + 1 if label_prefix != "QUERY" else None,
-                width=label_width,
-            ),
-            ha="center",
+            0.0,
+            1.0,
+            "\n".join(wrapped_lines),
+            ha="left",
             va="top",
             fontsize=label_fontsize,
             fontweight="semibold",
+            linespacing=1.35,
         )
 
 
@@ -203,8 +221,8 @@ def show_veri_good_and_junk(
 
     good_rows = max(1, ceil(max(1, len(good_files)) / max_cols))
     junk_rows = max(1, ceil(max(1, len(junk_files)) / max_cols))
-    total_height = 6 + good_rows * 4 + junk_rows * 4
-    total_width = max_cols * 4.5
+    total_height = 8 + good_rows * 5 + junk_rows * 5
+    total_width = max(14, max_cols * 5.5)
     if figsize is None:
         figsize = (total_width, total_height)
 
@@ -212,8 +230,8 @@ def show_veri_good_and_junk(
     outer = fig.add_gridspec(
         3,
         1,
-        height_ratios=[1.5, max(2.0, good_rows * 2.6), max(2.0, junk_rows * 2.6)],
-        hspace=0.28,
+        height_ratios=[2.6, max(2.5, good_rows * 3.3), max(2.5, junk_rows * 3.3)],
+        hspace=0.24,
     )
     fig.suptitle(
         "VeRi Query With Good And Junk Matches",
@@ -225,14 +243,14 @@ def show_veri_good_and_junk(
         0.5,
         0.94,
         f"Query index: {query_index} | Good shown: {len(good_files)} / {len(good_idx)} | "
-        f"Bad shown: {len(junk_files)} / {len(junk_idx)}",
+        f"Junk shown: {len(junk_files)} / {len(junk_idx)}",
         ha="center",
         va="center",
         fontsize=15,
         fontweight="semibold",
     )
 
-    query_section = outer[0].subgridspec(2, 1, height_ratios=[0.2, 0.8], hspace=0.08)
+    query_section = outer[0].subgridspec(2, 1, height_ratios=[0.14, 0.86], hspace=0.06)
     query_title_ax = fig.add_subplot(query_section[0])
     query_title_ax.axis("off")
     query_title_ax.text(
@@ -244,21 +262,28 @@ def show_veri_good_and_junk(
         fontsize=20,
         fontweight="bold",
     )
-    query_content = query_section[1].subgridspec(2, 1, height_ratios=[0.8, 0.2], hspace=0.08)
+    query_content = query_section[1].subgridspec(1, 2, width_ratios=[3.8, 1.6], wspace=0.12)
     query_ax = fig.add_subplot(query_content[0])
     query_text_ax = fig.add_subplot(query_content[1])
     query_ax.axis("off")
-    query_text_ax.axis("off")
     query_img = Image.open(query_file).convert("RGB")
     query_ax.imshow(query_img)
+    query_ax.set_box_aspect(query_img.height / query_img.width)
+    query_metadata_lines = ["QUERY", *_extract_image_metadata(query_file)]
+    query_wrapped_lines = []
+    for index, line in enumerate(query_metadata_lines):
+        width = 20 if index == 0 else 32
+        query_wrapped_lines.extend(textwrap.wrap(line, width=width) or [""])
+    query_text_ax.axis("off")
     query_text_ax.text(
-        0.5,
-        0.98,
-        _format_image_label("QUERY", query_file, width=28),
-        ha="center",
+        0.0,
+        1.0,
+        "\n".join(query_wrapped_lines),
+        ha="left",
         va="top",
         fontsize=15,
         fontweight="semibold",
+        linespacing=1.4,
     )
 
     _draw_image_grid(
