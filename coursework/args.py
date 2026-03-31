@@ -49,6 +49,12 @@ def argument_parser():
         default="RandomSampler",
         help="sampler for trainloader",
     )
+    parser.add_argument(
+        "--data-fraction",
+        type=float,
+        default=1.0,
+        help="fraction of train/query/gallery data to use for quicker trial runs",
+    )
 
     # ************************************************************
     # Data augmentation
@@ -275,6 +281,7 @@ def dataset_kwargs(parsed_args):
         "test_batch_size": parsed_args.test_batch_size,
         "workers": parsed_args.workers,
         "train_sampler": parsed_args.train_sampler,
+        "data_fraction": parsed_args.data_fraction,
         "random_erase": parsed_args.random_erase,
         "color_jitter": parsed_args.color_jitter,
         "color_aug": parsed_args.color_aug,

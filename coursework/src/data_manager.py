@@ -1,11 +1,38 @@
 # Copyright (c) EEEM071, University of Surrey
 
+import math
+import random
+from collections import defaultdict
+
 from torch.utils.data import DataLoader
 
 from .dataset_loader import ImageDataset
 from .datasets import init_imgreid_dataset
 from .samplers import build_train_sampler
 from .transforms import build_transforms
+
+
+def subsample_records(records, data_fraction=1.0, num_instances=None):
+    data_fraction = max(0.0, min(1.0, float(data_fraction)))
+    records = list(records)
+
+    if data_fraction >= 1.0 or not records:
+        return records
+
+    if num_instances is None:
+        keep = max(1, math.floor(len(records) * data_fraction))
+        return random.sample(records, min(keep, len(records)))
+
+    pid_to_records = defaultdict(list)
+    for item in records:
+        pid_to_records[item[1]].append(item)
+
+    sampled = []
+    for pid_records in pid_to_records.values():
+        keep = max(num_instances, math.ceil(len(pid_records) * data_fraction))
+        sampled.extend(random.sample(pid_records, min(keep, len(pid_records))))
+
+    return sampled
 
 
 class BaseDataManager:
@@ -25,6 +52,7 @@ class BaseDataManager:
         color_jitter=False,  # randomly change the brightness, contrast and saturation
         color_aug=False,  # randomly alter the intensities of RGB channels
         num_instances=4,  # number of instances per identity (for RandomIdentitySampler)
+        data_fraction=1.0,  # fraction of data to use for quicker trial runs
         **kwargs,
     ):
         self.use_gpu = use_gpu
@@ -41,6 +69,7 @@ class BaseDataManager:
         self.color_jitter = color_jitter
         self.color_aug = color_aug
         self.num_instances = num_instances
+        self.data_fraction = max(0.0, min(1.0, float(data_fraction)))
 
         transform_train, transform_test = build_transforms(
             self.height,
@@ -100,6 +129,10 @@ class ImageDataManager(BaseDataManager):
             self._num_train_pids += dataset.num_train_pids
             self._num_train_cams += dataset.num_train_cams
 
+        train = subsample_records(
+            train, data_fraction=self.data_fraction, num_instances=self.num_instances
+        )
+
         self.train_sampler = build_train_sampler(
             train,
             self.train_sampler,
@@ -126,9 +159,13 @@ class ImageDataManager(BaseDataManager):
 
         for name in self.target_names:
             dataset = init_imgreid_dataset(root=self.root, name=name)
+            query = subsample_records(dataset.query, data_fraction=self.data_fraction)
+            gallery = subsample_records(
+                dataset.gallery, data_fraction=self.data_fraction
+            )
 
             self.testloader_dict[name]["query"] = DataLoader(
-                ImageDataset(dataset.query, transform=self.transform_test),
+                ImageDataset(query, transform=self.transform_test),
                 batch_size=self.test_batch_size,
                 shuffle=False,
                 num_workers=self.workers,
@@ -137,7 +174,7 @@ class ImageDataManager(BaseDataManager):
             )
 
             self.testloader_dict[name]["gallery"] = DataLoader(
-                ImageDataset(dataset.gallery, transform=self.transform_test),
+                ImageDataset(gallery, transform=self.transform_test),
                 batch_size=self.test_batch_size,
                 shuffle=False,
                 num_workers=self.workers,
@@ -145,8 +182,8 @@ class ImageDataManager(BaseDataManager):
                 drop_last=False,
             )
 
-            self.testdataset_dict[name]["query"] = dataset.query
-            self.testdataset_dict[name]["gallery"] = dataset.gallery
+            self.testdataset_dict[name]["query"] = query
+            self.testdataset_dict[name]["gallery"] = gallery
 
         print("\n")
         print("  **************** Summary ****************")
@@ -155,6 +192,7 @@ class ImageDataManager(BaseDataManager):
         print(f"  # train ids      : {self.num_train_pids}")
         print("  # train images   : {}".format(len(train)))
         print(f"  # train cameras  : {self.num_train_cams}")
+        print(f"  data fraction    : {self.data_fraction}")
         print(f"  test names       : {self.target_names}")
         print("  *****************************************")
         print("\n")
