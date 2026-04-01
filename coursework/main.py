@@ -2,11 +2,13 @@
 
 import datetime
 import csv
+import contextlib
 import json
 import os
 import os.path as osp
 import sys
 import time
+import urllib.request
 import warnings
 
 import numpy as np
@@ -38,11 +40,66 @@ import uuid
 # global variables
 parser = argument_parser()
 args = parser.parse_args()
+if not getattr(args, "experiment", None):
+    args.experiment = args.arch
 _REQUESTED_SAVE_DIR = args.save_dir
 _RUN_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 args.save_dir = f"{args.save_dir}_{_RUN_TIMESTAMP}"
 _COMPARISON_EPOCHS = []
 _COMPARISON_EVALS = []
+
+
+@contextlib.contextmanager
+def pretrained_download_progress(enabled=True):
+    if not enabled:
+        yield
+        return
+
+    original_urlretrieve = urllib.request.urlretrieve
+
+    def tqdm_urlretrieve(url, filename=None, reporthook=None, data=None):
+        progress_bar = None
+        last_blocks = 0
+
+        def tqdm_reporthook(block_count, block_size, total_size):
+            nonlocal progress_bar, last_blocks
+            if progress_bar is None:
+                progress_bar = tqdm(
+                    total=total_size if total_size and total_size > 0 else None,
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    desc="Downloading pretrained weights",
+                    file=sys.stdout,
+                    leave=True,
+                )
+
+            downloaded = max(block_count - last_blocks, 0) * block_size
+            if downloaded:
+                progress_bar.update(downloaded)
+                last_blocks = block_count
+
+            if reporthook is not None:
+                reporthook(block_count, block_size, total_size)
+
+        try:
+            return original_urlretrieve(
+                url,
+                filename=filename,
+                reporthook=tqdm_reporthook,
+                data=data,
+            )
+        finally:
+            if progress_bar is not None:
+                if progress_bar.total is not None and progress_bar.n < progress_bar.total:
+                    progress_bar.update(progress_bar.total - progress_bar.n)
+                progress_bar.close()
+
+    urllib.request.urlretrieve = tqdm_urlretrieve
+    try:
+        yield
+    finally:
+        urllib.request.urlretrieve = original_urlretrieve
 
 
 def _write_comparison_outputs(total_elapsed_seconds):
@@ -68,6 +125,7 @@ def _write_comparison_outputs(total_elapsed_seconds):
         "run_save_dir": args.save_dir,
         "timestamp": _RUN_TIMESTAMP,
         "arch": args.arch,
+        "experiment": args.experiment,
         "source_names": list(args.source_names),
         "target_names": list(args.target_names),
         "root": args.root,
@@ -98,6 +156,7 @@ def _write_comparison_outputs(total_elapsed_seconds):
             fieldnames=[
                 "timestamp",
                 "arch",
+                "experiment",
                 "source_names",
                 "target_names",
                 "requested_save_dir",
@@ -121,6 +180,7 @@ def _write_comparison_outputs(total_elapsed_seconds):
             {
                 "timestamp": _RUN_TIMESTAMP,
                 "arch": args.arch,
+                "experiment": args.experiment,
                 "source_names": ",".join(args.source_names),
                 "target_names": ",".join(args.target_names),
                 "requested_save_dir": _REQUESTED_SAVE_DIR,
@@ -178,13 +238,16 @@ def main():
     trainloader, testloader_dict = dm.return_dataloaders()
 
     print(f"Initializing model: {args.arch}")
-    model = models.init_model(
-        name=args.arch,
-        num_classes=dm.num_train_pids,
-        loss={"xent", "htri"},
-        pretrained=not args.no_pretrained,
-        use_gpu=use_gpu,
-    )
+    if not args.no_pretrained:
+        print("Pretrained weights may be downloaded now if they are not already cached.")
+    with pretrained_download_progress(enabled=not args.no_pretrained):
+        model = models.init_model(
+            name=args.arch,
+            num_classes=dm.num_train_pids,
+            loss={"xent", "htri"},
+            pretrained=not args.no_pretrained,
+            use_gpu=use_gpu,
+        )
     print("Model size: {:.3f} M".format(count_num_param(model)))
 
     if args.load_weights and check_isfile(args.load_weights):

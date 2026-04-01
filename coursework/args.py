@@ -248,6 +248,12 @@ def argument_parser():
         "-a", "--arch", type=str, default="resnet50", help="model architecture"
     )
     parser.add_argument(
+        "--experiment",
+        type=str,
+        default=None,
+        help="experiment label used in summaries and plots (defaults to arch)",
+    )
+    parser.add_argument(
         "--no-pretrained", action="store_true", help="do not load pretrained weights"
     )
 
