@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import io
 import re
-import textwrap
 from pathlib import Path
-from math import ceil
 
 import matplotlib.pyplot as plt
+from IPython.display import HTML, display
 from PIL import Image
 
 
@@ -60,114 +61,69 @@ def _resolve_query_and_gallery(root: str | Path):
     return query_files, gallery_files
 
 
-def _format_image_label(prefix: str, img_path: Path, index: int | None = None, width: int = 18) -> str:
-    stem_parts = img_path.stem.split("_")
-    camera_text = ""
-    if len(stem_parts) >= 2 and stem_parts[1].startswith("c"):
-        camera_text = f"Camera: {stem_parts[1]}"
-
-    header = prefix if index is None else f"{prefix} {index}"
-    lines = [header, f"File: {img_path.name}"]
-    if camera_text:
-        lines.append(camera_text)
-
-    wrapped_lines = []
-    for line in lines:
-        wrapped_lines.extend(textwrap.wrap(line, width=width) or [""])
-    return "\n".join(wrapped_lines)
-
-
-def _extract_image_metadata(img_path: Path) -> list[str]:
-    stem_parts = img_path.stem.split("_")
-    metadata = [f"File: {img_path.name}"]
-
-    if stem_parts:
-        metadata.append(f"Vehicle: {stem_parts[0]}")
-    if len(stem_parts) >= 2 and stem_parts[1].startswith("c"):
-        metadata.append(f"Camera: {stem_parts[1]}")
-    if len(stem_parts) >= 3:
-        metadata.append(f"Frame: {stem_parts[2]}")
-
-    return metadata
-
-
-def _draw_image_grid(
-    fig,
-    grid_spec,
-    title: str,
-    image_paths: list[Path],
-    label_prefix: str,
-    max_cols: int,
-    label_width: int,
-    title_fontsize: int,
-    label_fontsize: int,
+def _show_single_image(
+    image_path: Path,
+    figsize: tuple[int, int] | None = None,
+    show_plot: bool = True,
 ):
-    section = grid_spec.subgridspec(2, 1, height_ratios=[0.18, 0.82], hspace=0.12)
-    title_ax = fig.add_subplot(section[0])
-    title_ax.axis("off")
-    title_ax.text(
-        0.0,
-        0.5,
-        title,
-        ha="left",
-        va="center",
-        fontsize=title_fontsize,
-        fontweight="bold",
-    )
+    if figsize is None:
+        figsize = (6, 6)
 
-    if not image_paths:
-        empty_ax = fig.add_subplot(section[1])
-        empty_ax.axis("off")
-        empty_ax.text(
-            0.5,
-            0.5,
-            "No images to display",
-            ha="center",
-            va="center",
-            fontsize=label_fontsize,
-            fontweight="semibold",
-        )
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+    image = Image.open(image_path).convert("RGB")
+    ax.imshow(image)
+    ax.set_box_aspect(image.height / image.width)
+
+    plt.tight_layout()
+    if show_plot:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def _image_to_data_uri(image_path: Path, max_size: tuple[int, int] = (220, 220)) -> str:
+    image = Image.open(image_path).convert("RGB")
+    image.thumbnail(max_size)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _display_match_table(title: str, matches: list[tuple[int, Path]], columns: int = 4):
+    if not matches:
+        print(f"No {title.lower()} to display.")
         return
 
-    cols = min(max_cols, max(1, len(image_paths)))
-    rows = ceil(len(image_paths) / cols)
-    image_grid = section[1].subgridspec(rows, cols, hspace=0.6, wspace=0.35)
+    rows = []
+    for start in range(0, len(matches), columns):
+        chunk = matches[start : start + columns]
+        cells = []
+        for index, image_path in chunk:
+            image_uri = _image_to_data_uri(image_path)
+            path_text = str(image_path).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            cells.append(
+                "<td style='border:1px solid #ccc;padding:10px;vertical-align:top;text-align:center;'>"
+                f"<img src='{image_uri}' style='max-width:220px;max-height:220px;display:block;margin:0 auto 8px auto;'/>"
+                f"<div style='font-size:13px;line-height:1.35;text-align:left;word-break:break-word;'>"
+                f"<strong>Index:</strong> {index}<br>"
+                f"<strong>Path:</strong> {path_text}"
+                "</div></td>"
+            )
+        while len(cells) < columns:
+            cells.append("<td style='border:1px solid #ccc;padding:10px;'></td>")
+        rows.append("<tr>" + "".join(cells) + "</tr>")
 
-    for slot in range(rows * cols):
-        cell = image_grid[slot // cols, slot % cols].subgridspec(
-            2,
-            1,
-            height_ratios=[0.9, 0.1],
-            hspace=0.02,
-        )
-        image_ax = fig.add_subplot(cell[0])
-        text_ax = fig.add_subplot(cell[1])
-        image_ax.axis("off")
-        if slot >= len(image_paths):
-            text_ax.axis("off")
-            continue
-
-        img_path = image_paths[slot]
-        image = Image.open(img_path).convert("RGB")
-        image_ax.imshow(image)
-        image_ax.set_box_aspect(image.height / image.width)
-        heading = label_prefix if label_prefix == "QUERY" else f"{label_prefix} {slot + 1}"
-        metadata_lines = [heading, *_extract_image_metadata(img_path)]
-        wrapped_lines = []
-        for index, line in enumerate(metadata_lines):
-            width = 20 if index == 0 else 28
-            wrapped_lines.extend(textwrap.wrap(line, width=width) or [""])
-        text_ax.axis("off")
-        text_ax.text(
-            0.0,
-            1.0,
-            "\n".join(wrapped_lines),
-            ha="left",
-            va="top",
-            fontsize=label_fontsize,
-            fontweight="semibold",
-            linespacing=1.35,
-        )
+    html = (
+        f"<div style='margin:16px 0;'>"
+        f"<div style='font-weight:700;font-size:18px;margin-bottom:8px;'>{title}</div>"
+        "<table style='border-collapse:collapse;width:100%;table-layout:fixed;'>"
+        + "".join(rows)
+        + "</table></div>"
+    )
+    display(HTML(html))
 
 
 def show_veri_good_and_junk(
@@ -178,13 +134,12 @@ def show_veri_good_and_junk(
     index_is_one_based: bool = False,
     gallery_indices_are_one_based: bool = True,
     max_good: int = 10,
-    max_junk: int = 10,
-    max_cols: int = 4,
+    max_bad: int = 10,
     figsize: tuple[int, int] | None = None,
     show_plot: bool = True,
 ):
     """
-    Show the query image together with its good and junk gallery matches.
+    Show good and bad gallery matches for a query index.
     """
     root = Path(root)
     gt_file = Path(gt_file) if gt_file else root / "gt_index.txt"
@@ -206,119 +161,24 @@ def show_veri_good_and_junk(
         )
 
     good_idx = _read_index_line(gt_file, q_idx)
-    junk_idx = _read_index_line(jk_file, q_idx)
+    bad_idx = _read_index_line(jk_file, q_idx)
 
     if gallery_indices_are_one_based:
         good_idx = [index - 1 for index in good_idx if index > 0]
-        junk_idx = [index - 1 for index in junk_idx if index > 0]
+        bad_idx = [index - 1 for index in bad_idx if index > 0]
 
     good_idx = [index for index in good_idx if 0 <= index < len(gallery_files)]
-    junk_idx = [index for index in junk_idx if 0 <= index < len(gallery_files)]
+    bad_idx = [index for index in bad_idx if 0 <= index < len(gallery_files)]
 
     good_files = [gallery_files[index] for index in good_idx[:max_good]]
-    junk_files = [gallery_files[index] for index in junk_idx[:max_junk]]
-    query_file = query_files[q_idx]
+    bad_files = [gallery_files[index] for index in bad_idx[:max_bad]]
 
-    good_rows = max(1, ceil(max(1, len(good_files)) / max_cols))
-    junk_rows = max(1, ceil(max(1, len(junk_files)) / max_cols))
-    total_height = 8 + good_rows * 5 + junk_rows * 5
-    total_width = max(14, max_cols * 5.5)
-    if figsize is None:
-        figsize = (total_width, total_height)
+    print(f"Query index: {query_index}")
+    print(f"Good indices ({len(good_idx)}): {good_idx}")
+    print(f"Bad indices ({len(bad_idx)}): {bad_idx}")
 
-    fig = plt.figure(figsize=figsize)
-    outer = fig.add_gridspec(
-        3,
-        1,
-        height_ratios=[2.6, max(2.5, good_rows * 3.3), max(2.5, junk_rows * 3.3)],
-        hspace=0.24,
-    )
-    fig.suptitle(
-        "VeRi Query With Good And Junk Matches",
-        fontsize=26,
-        fontweight="bold",
-        y=0.98,
-    )
-    fig.text(
-        0.5,
-        0.94,
-        f"Query index: {query_index} | Good shown: {len(good_files)} / {len(good_idx)} | "
-        f"Junk shown: {len(junk_files)} / {len(junk_idx)}",
-        ha="center",
-        va="center",
-        fontsize=15,
-        fontweight="semibold",
-    )
+    good_matches = list(zip(good_idx[:max_good], good_files))
+    bad_matches = list(zip(bad_idx[:max_bad], bad_files))
 
-    query_section = outer[0].subgridspec(2, 1, height_ratios=[0.14, 0.86], hspace=0.06)
-    query_title_ax = fig.add_subplot(query_section[0])
-    query_title_ax.axis("off")
-    query_title_ax.text(
-        0.0,
-        0.5,
-        "QUERY IMAGE",
-        ha="left",
-        va="center",
-        fontsize=20,
-        fontweight="bold",
-    )
-    query_content = query_section[1].subgridspec(1, 2, width_ratios=[3.8, 1.6], wspace=0.12)
-    query_ax = fig.add_subplot(query_content[0])
-    query_text_ax = fig.add_subplot(query_content[1])
-    query_ax.axis("off")
-    query_img = Image.open(query_file).convert("RGB")
-    query_ax.imshow(query_img)
-    query_ax.set_box_aspect(query_img.height / query_img.width)
-    query_metadata_lines = ["QUERY", *_extract_image_metadata(query_file)]
-    query_wrapped_lines = []
-    for index, line in enumerate(query_metadata_lines):
-        width = 20 if index == 0 else 32
-        query_wrapped_lines.extend(textwrap.wrap(line, width=width) or [""])
-    query_text_ax.axis("off")
-    query_text_ax.text(
-        0.0,
-        1.0,
-        "\n".join(query_wrapped_lines),
-        ha="left",
-        va="top",
-        fontsize=15,
-        fontweight="semibold",
-        linespacing=1.4,
-    )
-
-    _draw_image_grid(
-        fig=fig,
-        grid_spec=outer[1],
-        title="GOOD MATCHES",
-        image_paths=good_files,
-        label_prefix="GOOD",
-        max_cols=max_cols,
-        label_width=24,
-        title_fontsize=20,
-        label_fontsize=13,
-    )
-    _draw_image_grid(
-        fig=fig,
-        grid_spec=outer[2],
-        title="BAD / JUNK MATCHES",
-        image_paths=junk_files,
-        label_prefix="JUNK",
-        max_cols=max_cols,
-        label_width=24,
-        title_fontsize=20,
-        label_fontsize=13,
-    )
-
-    plt.tight_layout(rect=[0.02, 0.03, 0.98, 0.92])
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
-
-    return {
-        "query_file": str(query_file),
-        "good_files": [str(path) for path in good_files],
-        "junk_files": [str(path) for path in junk_files],
-        "num_good_total": len(good_idx),
-        "num_junk_total": len(junk_idx),
-    }
+    _display_match_table("Good Matches", good_matches)
+    _display_match_table("Bad Matches", bad_matches)
