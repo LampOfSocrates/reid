@@ -4,7 +4,7 @@ import torch.nn as nn
 import torchvision.models as tvmodels
 
 
-__all__ = ["mobilenet_v3_small", "vgg16"]
+__all__ = ["mobilenet_v3_small", "swin_t_fc512"]
 
 
 class TorchVisionModel(nn.Module):
@@ -35,16 +35,21 @@ class TorchVisionModel(nn.Module):
         else:
             raise KeyError(f"Unsupported loss: {self.loss}")
 
+def swin_t_fc512(num_classes, loss={"xent"}, pretrained=True, **kwargs):
+    if loss is None:
+        loss = {"xent"}
 
-def vgg16(num_classes, loss={"xent"}, pretrained=True, **kwargs):
     model = TorchVisionModel(
-        "vgg16",
+        "swin_t",
         num_classes=num_classes,
         loss=loss,
+        weights="DEFAULT" if pretrained else None,
         pretrained=pretrained,
+        fc_dims=[512],
         **kwargs,
     )
     return model
+
 
 
 def mobilenet_v3_small(num_classes, loss={"xent"}, pretrained=True, **kwargs):
@@ -56,6 +61,7 @@ def mobilenet_v3_small(num_classes, loss={"xent"}, pretrained=True, **kwargs):
         **kwargs,
     )
     return model
+
 
 
 # Define any models supported by torchvision bellow

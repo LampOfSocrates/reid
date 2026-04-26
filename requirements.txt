@@ -1,0 +1,16 @@
+# GPU: NVIDIA GeForce RTX 5070 Ti (Blackwell, sm_120) -> requires CUDA >= 12.8
+# Install with:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu128
+# For CPU-only: replace the torch/torchvision pins below with plain `torch==2.11.0` and `torchvision==0.26.0`.
+
+torch==2.11.0+cu128
+torchvision==0.26.0
+timm==1.0.26
+numpy==2.4.4
+pandas==3.0.2
+Pillow==12.2.0
+matplotlib==3.10.8
+seaborn==0.13.2
+tqdm==4.67.3
+ipython==9.12.0
+gdown==6.0.0

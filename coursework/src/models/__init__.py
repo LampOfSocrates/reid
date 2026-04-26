@@ -8,8 +8,9 @@ from .resnet import (
     resnet50,
     resnet50_fc512,
 )
-from .clip_senet import clip_senet
-from .tvmodels import mobilenet_v3_small, vgg16
+from .clip_senet import clip_senet_v1_dual, clip_senet_v2_frozen
+from .tvmodels import mobilenet_v3_small
+from .timm_model import swin_t_fc512 , swin_t_custom
 
 
 __model_factory = {
@@ -20,9 +21,11 @@ __model_factory = {
     "resnet34_fc512": resnet34_fc512,
     "resnet50": resnet50,
     "resnet50_fc512": resnet50_fc512,
-    "clip_senet": clip_senet,
     "mobilenet_v3_small": mobilenet_v3_small,
-    "vgg16": vgg16,
+    "swin_t_fc512" : swin_t_fc512,
+    "swin_t_custom" : swin_t_custom,
+    "clip_senet_v1_dual"  : clip_senet_v1_dual,
+    "clip_senet_v2_frozen"  : clip_senet_v2_frozen,
 }
 
 
