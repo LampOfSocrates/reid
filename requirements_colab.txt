@@ -4,3 +4,4 @@
 # Install with:  !pip install -r requirements_colab.txt
 timm>=1.0.26
 gdown>=5.0
+torchreid
