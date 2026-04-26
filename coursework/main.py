@@ -409,6 +409,8 @@ def train(
                 htri_loss = criterion_htri(features, pids)
 
             loss = args.lambda_xent * xent_loss + args.lambda_htri * htri_loss
+            if hasattr(model, "aux_loss"):
+                loss = loss + model.aux_loss(features, pids)
 
         optimizer.zero_grad(set_to_none=True)
         loss.backward()

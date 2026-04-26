@@ -9,6 +9,7 @@ from .resnet import (
     resnet50_fc512,
 )
 from .clip_senet import clip_senet_v1_dual, clip_senet_v2_frozen
+from .clip_senet_v3 import clip_senet_v3_ibn_supcon
 from .tvmodels import mobilenet_v3_small
 from .timm_model import swin_t_fc512 , swin_t_custom
 
@@ -26,6 +27,7 @@ __model_factory = {
     "swin_t_custom" : swin_t_custom,
     "clip_senet_v1_dual"  : clip_senet_v1_dual,
     "clip_senet_v2_frozen"  : clip_senet_v2_frozen,
+    "clip_senet_v3_ibn_supcon"  : clip_senet_v3_ibn_supcon,
 }
 
 

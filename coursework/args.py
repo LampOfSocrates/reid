@@ -209,6 +209,12 @@ def argument_parser():
         help="stepsize to decay learning rate",
     )
     parser.add_argument("--gamma", default=0.1, type=float, help="learning rate decay")
+    parser.add_argument(
+        "--warmup-epochs",
+        type=int,
+        default=0,
+        help="linear LR warmup epochs (used by --lr-scheduler multi_step_warmup)",
+    )
 
     # ************************************************************
     # Cross entropy loss-specific setting
@@ -384,4 +390,5 @@ def lr_scheduler_kwargs(parsed_args):
         "lr_scheduler": parsed_args.lr_scheduler,
         "stepsize": parsed_args.stepsize,
         "gamma": parsed_args.gamma,
+        "warmup_epochs": parsed_args.warmup_epochs,
     }
