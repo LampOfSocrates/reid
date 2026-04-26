@@ -1,0 +1,6 @@
+# Colab-only requirements.
+# Colab preinstalls torch, torchvision, numpy, pandas, Pillow, matplotlib,
+# seaborn, tqdm, ipython — do NOT pin those here (it desyncs the runtime).
+# Install with:  !pip install -r requirements_colab.txt
+timm>=1.0.26
+gdown>=5.0
