@@ -300,6 +300,12 @@ def argument_parser():
     # ************************************************************
     # Miscs
     # ************************************************************
+    parser.add_argument(
+        "--patience",
+        type=int,
+        default=0,
+        help="early-stopping patience in eval rounds (0 = disabled)",
+    )
     parser.add_argument("--print-freq", type=int, default=10, help="print frequency")
     parser.add_argument("--seed", type=int, default=1, help="manual seed")
     parser.add_argument(
@@ -316,6 +322,10 @@ def argument_parser():
         "--save-checkpoint",
         action="store_true",
         help="save model checkpoints during training",
+    )
+    parser.add_argument(
+        "--drive-sync-dir", type=str, default="",
+        help="if set, copy save_dir here every 10 epochs (Colab Drive path)",
     )
     parser.add_argument("--use-cpu", action="store_true", help="use cpu")
     parser.add_argument(
@@ -354,6 +364,7 @@ def dataset_kwargs(parsed_args):
         "test_batch_size": parsed_args.test_batch_size,
         "workers": parsed_args.workers,
         "train_sampler": parsed_args.train_sampler,
+        "num_instances": parsed_args.num_instances,
         "data_fraction": parsed_args.data_fraction,
         "random_erase": parsed_args.random_erase,
         "color_jitter": parsed_args.color_jitter,
@@ -391,4 +402,5 @@ def lr_scheduler_kwargs(parsed_args):
         "stepsize": parsed_args.stepsize,
         "gamma": parsed_args.gamma,
         "warmup_epochs": parsed_args.warmup_epochs,
+        "max_epoch": parsed_args.max_epoch,
     }

@@ -287,14 +287,17 @@ This section consolidates **only what the downloaded papers say** about each of 
 
 | Field | Value |
 |---|---|
-| Paper (architecture) | Liu et al., *Swin Transformer: Hierarchical Vision Transformer using Shifted Windows*, ICCV 2021 — [2103.14030_SwinTransformer_Liu2021.pdf](coursework/papers/2103.14030_SwinTransformer_Liu2021.pdf) |
-| VeRi-776 numbers in this paper | **None** — Swin paper benchmarks ImageNet-1K, COCO detection, ADE20K segmentation only. Swin-T reported as 81.3% top-1 on ImageNet-1K |
-| Most relevant transformer reference in folder | TransReID — [2102.04378_TransReID_He2021.pdf](coursework/papers/2102.04378_TransReID_He2021.pdf), Table 2 p. 6, Table 6 p. 8 |
-| Closest VeRi-776 transformer numbers (TransReID Table 2, p. 6) | DeiT-S/16 → 76.3 / 95.5 · **DeiT-B/16 → 78.4 / 95.9** · ViT-B/16 → 78.2 / 96.5 · ViT-B/16 sliding s=12 → 79.0 / 96.5 |
-| TransReID full method on VeRi-776 (Table 6, p. 8) | TransReID\* (DeiT-B/16, with cam+view, sliding) → **82.3 mAP / 97.1 R1**; TransReID\* (ViT-B/16) → 82.0 / 97.1 |
-| Special hyperparameters for transformer Re-ID on VeRi-776 (TransReID §4.2, p. 5-6) | **Image 256×256** (vehicles, larger than 256×128 used for persons); h-flip + pad + random crop + random erasing; batch 64 (4 imgs/ID); **SGD** mom=0.9, wd=1e-4; **lr 0.008** with **cosine decay**; **FP16**; **m=8, k=4** for vehicle JPM; ImageNet-21K → ImageNet-1K pretraining for ViT (DeiT uses ImageNet-1K only); SIE λ=2.5 best on VeRi-776 (Fig. 7b, p. 7) |
-| Caveat | TransReID uses ViT/DeiT — *not* Swin-T. The Swin-T paper itself contains **no VeRi-776 baseline**; the original Swin-T VeRi-776 baseline appears in **Li et al., Array 2022** (not in `papers/` — see §6 of this knowledge file) |
-| AdamW vs SGD (TransReID Table 7, p. 11) | For transformer Re-ID, **SGD beats Adam by 12.4 mAP on VeRi-776** (78.2 vs 65.8) — Adam optimisers used by our [main.py](coursework/main.py) likely under-train Swin/CLIP variants |
+| Direct paper (Swin-T applied to VeRi-776) | Li et al., *Vehicle Re-identification method based on Swin-Transformer network*, **Array 16 (2022) 100255** — [1-s2.0-S2590005622000881-main.pdf](coursework/papers/1-s2.0-S2590005622000881-main.pdf). This is the canonical citation our `swin_t_fc512` is named after. |
+| Best VeRi-776 mAP / Rank-1 (Li et al. Table 2, p. 6) | **Swin Transformer → 78.6 mAP / 97.3 Rank-1** (best in their table) — *narrowly* beats TransReID 78.2 / 96.5 on Rank-1 (+0.8) and slightly on mAP (+0.4) |
+| Other VeRi-776 baselines they report (Table 2, p. 6) | VAMI 50.1 / 77.0 · PROVID 53.4 / 81.6 · VSTP 58.8 / 86.4 · SSL 61.1 / 88.6 · RAM 61.5 / 88.6 · QD-DLF 61.8 / 88.5 · MTCRO 62.6 / 88.0 · TransReID 78.2 / 96.5 |
+| Special hyperparameters (§3, p. 5) | **Input 256×256**, **window size 4×4**, **batch 32**, **60 epochs** (loss stabilises ≈ epoch 60, Figs. 4-5 p. 6 + Fig. 7 p. 7); augmentations = random flip + random erase + random crop; ImageNet-pretrained Swin defaults; 1× RTX 3060 (12 GB) |
+| Caveats with Li et al. 2022 | Paper is short and omits: (a) explicit Swin variant — *Tiny vs Small vs Base* not stated; community follow-ups assume **Swin-Tiny**; (b) optimiser, learning rate, and scheduler; (c) loss function combination — only "softmax loss" implied |
+| Architecture paper (background) | Liu et al., *Swin Transformer: Hierarchical Vision Transformer using Shifted Windows*, ICCV 2021 — [2103.14030_SwinTransformer_Liu2021.pdf](coursework/papers/2103.14030_SwinTransformer_Liu2021.pdf) — no VeRi-776 numbers; Swin-T reported as 81.3% top-1 on ImageNet-1K |
+| Cross-validation (CLIP-SENet Table I, p. 6) | CLIP-SENet's SOTA table does **not** list Li et al. 2022 Swin-T as a baseline, so 78.6 / 97.3 is most directly comparable only to TransReID-era methods, not modern CLIP/IBN-based SOTA |
+| Cross-validation (GLSIPNet Table 2, p. 10, [applsci-15-07041.pdf](coursework/papers/applsci-15-07041.pdf)) | Reproduces Li et al. 2022 number: "Swin Transformer [53] → 78.6 mAP / 97.3 R1" |
+| Comparable VeRi-776 transformer numbers (TransReID Table 2 + Table 6) | DeiT-S/16 → 76.3 / 95.5 · DeiT-B/16 → 78.4 / 95.9 · ViT-B/16 → 78.2 / 96.5 · ViT-B/16 sliding s=12 → 79.0 / 96.5 · Full TransReID\* (DeiT-B/16, cam+view) → **82.3 / 97.1** |
+| TransReID hyperparameters for transformer Re-ID on VeRi-776 (§4.2, p. 5-6) | Image 256×256, h-flip + pad + random crop + random erasing; batch 64 (4 imgs/ID); **SGD** mom=0.9, wd=1e-4; lr 0.008 cosine decay; FP16; ImageNet-21K → ImageNet-1K pretrain |
+| Optimiser warning (TransReID Table 7, p. 11) | For transformer Re-ID, **SGD beats Adam by 12.4 mAP on VeRi-776** (78.2 vs 65.8). Our [main.py](coursework/main.py) defaults to Adam/AMSGrad — likely under-trains Swin/CLIP variants |
 
 ### 8.4 `mobilenet_v3_small`
 
@@ -306,7 +309,33 @@ This section consolidates **only what the downloaded papers say** about each of 
 | Best published VeRi-776 number for any small/efficient backbone in folder | None reported — all CNN baselines in TransReID use ResNet/ResNeSt; CLIP-SENet uses ResNeXt-IBN |
 | Implication for this coursework | `mobilenet_v3_small` should be treated as a **lightweight reference** for params/latency vs. accuracy trade-offs — there is no published VeRi-776 number to compare against. Numbers must come from your own runs |
 
-### 8.5 Cross-paper recipe summary for VeRi-776
+### 8.5 GLSIPNet (additional ResNet-50 reference for VeRi-776)
+
+| Field | Value |
+|---|---|
+| Paper | Nath & Mitra, *Learning Part-Based Features for Vehicle Re-Identification with Global Context*, **MDPI Applied Sciences 15 (2025) 7041** — [applsci-15-07041.pdf](coursework/papers/applsci-15-07041.pdf) |
+| Backbone | **ResNet-50** ImageNet-pretrained (§3.2, p. 7) — directly comparable to local `resnet50_fc512` |
+| Best VeRi-776 (Table 1, p. 10) | **GLSIPNet → 76.76 mAP / 94.63 R1 / 97.55 R5 / 98.92 R10**; with re-ranking → **80.99 / 95.70 / 97.55 / 98.68** |
+| Baseline (PCB-style, no global similarity) on VeRi-776 (Table 1, p. 10) | 74.17 mAP / 94.04 R1 (+RR: 78.75 / 94.69) — provides another **ResNet-50 + horizontal-PCB baseline** number for VeRi-776 (cf. TransReID's 76.4 mAP, §8.1) |
+| Special hyperparameters (§4, p. 9) | **Input 384×192**, **batch 32**, **6 horizontal parts** (PCB-style), **60 + 10 epochs** (cycle-1 part-only + cycle-2 with global similarity), augmentations = h-flip + random erasing + ImageNet normalisation, distance = Euclidean with similarity f(x)=1/x, **k-reciprocal re-ranking** as post-processing |
+| Method (§3.3, p. 7-8) | Two training cycles: cycle 1 trains 6 horizontal parts independently with cross-entropy; cycle 2 weights each part's CE loss by its inverse Euclidean distance to the global feature vector — adds a *global signal* without adding trainable parameters |
+| Compared methods on VeRi-776 (Table 2, p. 10) | Confirms Swin-T 78.6 / 97.3 (Li et al.) and TransReID 78.2 / 96.5; lists 18 methods total — useful sanity check for §8 numbers |
+
+### 8.6 BoT tricks reference grid
+
+| Trick | What it does | Paper § |
+|---|---|---|
+| **Warmup LR** | Start slow, ramp up — stops early large updates from breaking pretrained weights | §3.1 |
+| **Random Erasing** | Randomly blacks out a patch — model can't rely on one part of the vehicle | §3.2 |
+| **Label Smoothing** | Softens hard targets (ε=0.1) — stops the model becoming overconfident on training IDs | §3.3 |
+| **Last-stride = 1** | Keeps more spatial detail in the final ResNet layer — helps spot fine-grained differences like plates and badges | §3.4 |
+| **BNNeck** | Normalises before classification but not before distance comparison — separates the two tasks which need features in different shapes | §3.5 |
+| **Center Loss** | Extra penalty if same-vehicle images end up far apart — pulls embeddings into tight clusters | §3.6 |
+| **Hard Triplet** | Mines the examples the model is currently getting most wrong — harder examples mean faster learning | §3.6 |
+| **Identity Sampler** | Guarantees each batch has multiple photos of the same vehicles — without this triplet loss rarely sees useful pairs | §2 |
+| **Optimiser** | Adam lr=3.5e-4, drops ×0.1 at epochs 40 & 70 — big updates early, fine-tuning later, 120 epochs total | §2 |
+
+### 8.7 Cross-paper recipe summary for VeRi-776
 
 | Recipe element | BoT (person, p. 2-6) | TransReID (vehicle, §4.2 p. 5-6) | CLIP-SENet (vehicle, §IV.B p. 6-7) |
 |---|---|---|---|

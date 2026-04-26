@@ -302,6 +302,8 @@ def main():
         print('Done. All layers are open to train for {} epochs'.format(args.max_epoch))
         optimizer.load_state_dict(initial_optim_state)
     """
+    _es_best_map = 0.0
+    _es_no_improve = 0
     for epoch in range(args.start_epoch, args.max_epoch):
         epoch_stats = train(
             epoch,
@@ -319,6 +321,12 @@ def main():
         )
 
         scheduler.step()
+
+        if args.drive_sync_dir and (epoch + 1) % 10 == 0:
+            import shutil
+            dest = osp.join(args.drive_sync_dir, osp.basename(args.save_dir))
+            shutil.copytree(args.save_dir, dest, dirs_exist_ok=True)
+            print(f"[Drive sync] epoch {epoch + 1} → {dest}")
 
         if (
             (epoch + 1) > args.start_eval
@@ -359,6 +367,17 @@ def main():
                     },
                     args.save_dir,
                 )
+
+            if args.patience > 0:
+                current_map = eval_metrics["mAP"]
+                if current_map > _es_best_map:
+                    _es_best_map = current_map
+                    _es_no_improve = 0
+                else:
+                    _es_no_improve += 1
+                    if _es_no_improve >= args.patience:
+                        print(f"Early stopping: mAP did not improve for {args.patience} consecutive evals (best {_es_best_map:.4f}). Stopping at epoch {epoch + 1}.")
+                        break
 
     elapsed = round(time.time() - time_start)
     elapsed = str(datetime.timedelta(seconds=elapsed))
