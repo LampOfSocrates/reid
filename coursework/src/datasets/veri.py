@@ -19,7 +19,7 @@ class VeRi(BaseImageDataset):
     # images: 37778 (train) + 11579 (query)
     """
 
-    dataset_dir = "VeRi"
+    dataset_dir = "VeRi224"
 
     def __init__(self, root="datasets", verbose=True, **kwargs):
         super().__init__(root)

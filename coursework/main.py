@@ -1,5 +1,8 @@
 # Copyright (c) EEEM071, University of Surrey
 
+import os
+os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", os.path.join(os.path.dirname(__file__), ".torch_compile_cache"))
+
 import datetime
 import csv
 import contextlib
@@ -255,6 +258,9 @@ def main():
         load_pretrained_weights(model, args.load_weights)
 
     model = nn.DataParallel(model).cuda() if use_gpu else model
+    if use_gpu:
+        model = model.to(memory_format=torch.channels_last)
+    model = torch.compile(model, mode="reduce-overhead")
 
     criterion_xent = CrossEntropyLoss(
         num_classes=dm.num_train_pids, use_gpu=use_gpu, label_smooth=args.label_smooth
@@ -412,7 +418,7 @@ def train(
         data_time.update(time.time() - end)
 
         if use_gpu:
-            imgs = imgs.cuda(non_blocking=True)
+            imgs = imgs.cuda(non_blocking=True).to(memory_format=torch.channels_last)
             pids = pids.cuda(non_blocking=True)
 
         with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_gpu):
@@ -483,7 +489,7 @@ def test(
         qf, q_pids, q_camids = [], [], []
         for batch_idx, (imgs, pids, camids, _) in enumerate(queryloader):
             if use_gpu:
-                imgs = imgs.cuda(non_blocking=True)
+                imgs = imgs.cuda(non_blocking=True).to(memory_format=torch.channels_last)
 
             end = time.time()
             features = model(imgs)

@@ -5,6 +5,7 @@ import random
 
 import torch
 import torchvision.transforms as T
+import torchvision.transforms.v2 as v2
 from PIL import Image
 
 
@@ -137,34 +138,33 @@ def build_transforms(
     # TODO: compute dataset-specific mean and std
     imagenet_mean = [0.485, 0.456, 0.406]
     imagenet_std = [0.229, 0.224, 0.225]
-    normalize = T.Normalize(mean=imagenet_mean, std=imagenet_std)
 
     # build train transformations
+    # Images pre-cached at 252×252 (= height × 1.125), so RandomCrop replaces
+    # Random2DTranslation with zero resize cost.
     transform_train = []
-    transform_train += [Random2DTranslation(height, width)]
+    transform_train += [T.RandomCrop((height, width))]
     transform_train += [T.RandomHorizontalFlip()]
     if crop_aug:
         transform_train += [T.RandomCrop((height, width), padding=10)]
     if color_jitter:
-        transform_train += [
-            T.ColorJitter(brightness=0.2, contrast=0.15, saturation=0, hue=0)
-        ]
+        transform_train += [T.ColorJitter(brightness=0.2, contrast=0.15, saturation=0, hue=0)]
     if blur_aug:
         transform_train += [T.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))]
-    transform_train += [T.ToTensor()]
+    transform_train += [v2.ToImage(), v2.ToDtype(torch.float32, scale=True)]
     if color_aug:
         transform_train += [ColorAugmentation()]
-    transform_train += [normalize]
+    transform_train += [v2.Normalize(mean=imagenet_mean, std=imagenet_std)]
     if random_erase:
-        transform_train += [RandomErasing()]
+        transform_train += [v2.RandomErasing(p=0.5, scale=(0.02, 0.4), ratio=(0.3, 3.33))]
     transform_train = T.Compose(transform_train)
 
     # build test transformations
     transform_test = T.Compose(
         [
-            T.Resize((height, width)),
-            T.ToTensor(),
-            normalize,
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=imagenet_mean, std=imagenet_std),
         ]
     )
 
