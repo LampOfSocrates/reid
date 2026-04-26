@@ -1,6 +1,5 @@
 # Copyright (c) EEEM071, University of Surrey
 
-import os
 import os.path as osp
 import sys
 
@@ -39,7 +38,6 @@ class Logger:
         self.console.flush()
         if self.file is not None:
             self.file.flush()
-            os.fsync(self.file.fileno())
 
     def close(self):
         self.console.close()

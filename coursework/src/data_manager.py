@@ -153,6 +153,8 @@ class ImageDataManager(BaseDataManager):
             num_workers=self.workers,
             pin_memory=self.use_gpu,
             drop_last=True,
+            persistent_workers=self.workers > 0,
+            prefetch_factor=4 if self.workers > 0 else None,
         )
 
         print("=> Initializing TEST (target) datasets")
@@ -177,6 +179,8 @@ class ImageDataManager(BaseDataManager):
                 num_workers=self.workers,
                 pin_memory=self.use_gpu,
                 drop_last=False,
+                persistent_workers=self.workers > 0,
+                prefetch_factor=4 if self.workers > 0 else None,
             )
 
             self.testloader_dict[name]["gallery"] = DataLoader(
@@ -186,6 +190,8 @@ class ImageDataManager(BaseDataManager):
                 num_workers=self.workers,
                 pin_memory=self.use_gpu,
                 drop_last=False,
+                persistent_workers=self.workers > 0,
+                prefetch_factor=4 if self.workers > 0 else None,
             )
 
             self.testdataset_dict[name]["query"] = query
