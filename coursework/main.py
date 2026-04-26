@@ -13,6 +13,7 @@ import warnings
 
 import numpy as np
 import torch
+import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 from tqdm import tqdm
@@ -392,21 +393,24 @@ def train(
         data_time.update(time.time() - end)
 
         if use_gpu:
-            imgs, pids = imgs.cuda(), pids.cuda()
+            imgs = imgs.cuda(non_blocking=True)
+            pids = pids.cuda(non_blocking=True)
 
-        outputs, features = model(imgs)
-        if isinstance(outputs, (tuple, list)):
-            xent_loss = DeepSupervision(criterion_xent, outputs, pids)
-        else:
-            xent_loss = criterion_xent(outputs, pids)
+        with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=use_gpu):
+            outputs, features = model(imgs)
+            if isinstance(outputs, (tuple, list)):
+                xent_loss = DeepSupervision(criterion_xent, outputs, pids)
+            else:
+                xent_loss = criterion_xent(outputs, pids)
 
-        if isinstance(features, (tuple, list)):
-            htri_loss = DeepSupervision(criterion_htri, features, pids)
-        else:
-            htri_loss = criterion_htri(features, pids)
+            if isinstance(features, (tuple, list)):
+                htri_loss = DeepSupervision(criterion_htri, features, pids)
+            else:
+                htri_loss = criterion_htri(features, pids)
 
-        loss = args.lambda_xent * xent_loss + args.lambda_htri * htri_loss
-        optimizer.zero_grad()
+            loss = args.lambda_xent * xent_loss + args.lambda_htri * htri_loss
+
+        optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
 
@@ -448,20 +452,23 @@ def test(
     return_metrics=False,
 ):
     batch_time = AverageMeter()
+    eval_start = time.time()
 
     model.eval()
 
-    with torch.no_grad():
+    with torch.inference_mode(), torch.autocast(
+        device_type="cuda", dtype=torch.bfloat16, enabled=use_gpu
+    ):
         qf, q_pids, q_camids = [], [], []
         for batch_idx, (imgs, pids, camids, _) in enumerate(queryloader):
             if use_gpu:
-                imgs = imgs.cuda()
+                imgs = imgs.cuda(non_blocking=True)
 
             end = time.time()
             features = model(imgs)
             batch_time.update(time.time() - end)
 
-            features = features.data.cpu()
+            features = features.float().data.cpu()
             qf.append(features)
             q_pids.extend(pids)
             q_camids.extend(camids)
@@ -478,13 +485,13 @@ def test(
         gf, g_pids, g_camids = [], [], []
         for batch_idx, (imgs, pids, camids, _) in enumerate(galleryloader):
             if use_gpu:
-                imgs = imgs.cuda()
+                imgs = imgs.cuda(non_blocking=True)
 
             end = time.time()
             features = model(imgs)
             batch_time.update(time.time() - end)
 
-            features = features.data.cpu()
+            features = features.float().data.cpu()
             gf.append(features)
             g_pids.extend(pids)
             g_camids.extend(camids)
@@ -497,6 +504,14 @@ def test(
                 gf.size(0), gf.size(1)
             )
         )
+
+    eval_elapsed = time.time() - eval_start
+    n_q, n_g = qf.size(0), gf.size(0)
+    print(
+        f"=> Eval time: {eval_elapsed:.2f}s "
+        f"(query={n_q}, gallery={n_g}, "
+        f"avg batch fwd={batch_time.avg * 1000:.1f}ms)"
+    )
 
     print(
         f"=> BatchTime(s)/BatchSize(img): {batch_time.avg:.3f}/{args.test_batch_size}"
