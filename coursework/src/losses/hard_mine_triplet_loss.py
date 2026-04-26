@@ -26,6 +26,9 @@ class TripletLoss(nn.Module):
         - inputs: feature matrix with shape (batch_size, feat_dim)
         - targets: ground truth labels with shape (num_classes)
         """
+        # Hard-mining distance math is more stable in float32 and avoids
+        # dtype mismatches when training runs under autocast/bfloat16.
+        inputs = inputs.float()
         n = inputs.size(0)
 
         # Compute pairwise distance, replace by the official when merged
