@@ -13,12 +13,12 @@ class Logger:
     Code imported from https://github.com/Cysu/open-reid/blob/master/reid/utils/logging.py.
     """
 
-    def __init__(self, fpath=None):
+    def __init__(self, fpath=None, mode="w"):
         self.console = sys.stdout
         self.file = None
         if fpath is not None:
             mkdir_if_missing(osp.dirname(fpath))
-            self.file = open(fpath, "w")
+            self.file = open(fpath, mode)
 
     def __del__(self):
         self.close()

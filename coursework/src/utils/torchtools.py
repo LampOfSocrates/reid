@@ -11,7 +11,7 @@ import torch.nn as nn
 from .iotools import mkdir_if_missing
 
 
-def save_checkpoint(state, save_dir, is_best=False, remove_module_from_keys=False):
+def save_checkpoint(state, save_dir, is_best=False, remove_module_from_keys=False, scheduler=None):
     mkdir_if_missing(save_dir)
     if remove_module_from_keys:
         # remove 'module.' in state_dict's keys
@@ -22,6 +22,8 @@ def save_checkpoint(state, save_dir, is_best=False, remove_module_from_keys=Fals
                 k = k[7:]
             new_state_dict[k] = v
         state["state_dict"] = new_state_dict
+    if scheduler is not None:
+        state["scheduler"] = scheduler.state_dict()
     # save
     epoch = state["epoch"]
     fpath = osp.join(save_dir, "model.pth.tar-" + str(epoch))
@@ -31,14 +33,17 @@ def save_checkpoint(state, save_dir, is_best=False, remove_module_from_keys=Fals
         shutil.copy(fpath, osp.join(osp.dirname(fpath), "best_model.pth.tar"))
 
 
-def resume_from_checkpoint(ckpt_path, model, optimizer=None):
+def resume_from_checkpoint(ckpt_path, model, optimizer=None, scheduler=None):
     print(f'Loading checkpoint from "{ckpt_path}"')
-    ckpt = torch.load(ckpt_path)
+    ckpt = torch.load(ckpt_path, weights_only=False)
     model.load_state_dict(ckpt["state_dict"])
     print("Loaded model weights")
     if optimizer is not None:
         optimizer.load_state_dict(ckpt["optimizer"])
         print("Loaded optimizer")
+    if scheduler is not None and "scheduler" in ckpt:
+        scheduler.load_state_dict(ckpt["scheduler"])
+        print("Loaded scheduler")
     start_epoch = ckpt["epoch"]
     print(
         "** previous epoch = {}\t previous rank1 = {:.1%}".format(

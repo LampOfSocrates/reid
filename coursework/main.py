@@ -13,6 +13,8 @@ import sys
 import time
 import urllib.request
 import warnings
+import logging
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
 
 import numpy as np
 import torch
@@ -48,7 +50,12 @@ if not getattr(args, "experiment", None):
     args.experiment = args.arch
 _REQUESTED_SAVE_DIR = args.save_dir
 _RUN_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-args.save_dir = f"{args.save_dir}_{_RUN_TIMESTAMP}"
+if args.resume and osp.isfile(args.resume):
+    # Resume into the same directory the checkpoint lives in — no new timestamp folder
+    args.save_dir = osp.dirname(osp.abspath(args.resume))
+else:
+    args.save_dir = f"{args.save_dir}_{_RUN_TIMESTAMP}"
+_RESUMING = args.resume and osp.isfile(args.resume)
 _COMPARISON_EPOCHS = []
 _COMPARISON_EVALS = []
 
@@ -218,7 +225,8 @@ def main():
     if args.use_cpu:
         use_gpu = False
     log_name = "log_test.txt" if args.evaluate else "log_train.txt"
-    sys.stdout = Logger(osp.join(args.save_dir, log_name))
+    log_mode = "a" if _RESUMING else "w"
+    sys.stdout = Logger(osp.join(args.save_dir, log_name), mode=log_mode)
     print("==========")
     student_id = os.environ.get('STUDENT_ID', '<your id>')
     student_name = os.environ.get('STUDENT_NAME', '<your name>')
@@ -260,7 +268,8 @@ def main():
     model = nn.DataParallel(model).cuda() if use_gpu else model
     if use_gpu:
         model = model.to(memory_format=torch.channels_last)
-    model = torch.compile(model, mode="reduce-overhead")
+    if sys.platform != "win32":
+        model = torch.compile(model, mode="reduce-overhead")
 
     criterion_xent = CrossEntropyLoss(
         num_classes=dm.num_train_pids, use_gpu=use_gpu, label_smooth=args.label_smooth
@@ -271,7 +280,7 @@ def main():
 
     if args.resume and check_isfile(args.resume):
         args.start_epoch = resume_from_checkpoint(
-            args.resume, model, optimizer=optimizer
+            args.resume, model, optimizer=optimizer, scheduler=scheduler
         )
 
     if args.evaluate:
@@ -372,6 +381,7 @@ def main():
                         "optimizer": optimizer.state_dict(),
                     },
                     args.save_dir,
+                    scheduler=scheduler,
                 )
 
             if args.patience > 0:
@@ -390,6 +400,12 @@ def main():
     print(f"Elapsed {elapsed}")
     _write_comparison_outputs(time.time() - time_start)
     ranklogger.show_summary()
+
+    if args.save_checkpoint and _COMPARISON_EVALS:
+        last_epoch = _COMPARISON_EVALS[-1]["epoch"]
+        last_ckpt = osp.abspath(osp.join(args.save_dir, f"model.pth.tar-{last_epoch}"))
+        if osp.isfile(last_ckpt):
+            print(f"\n=> Checkpoint: {last_ckpt}")
 
 
 def train(
@@ -495,7 +511,7 @@ def test(
             features = model(imgs)
             batch_time.update(time.time() - end)
 
-            features = features.float().data.cpu()
+            features = features.to(dtype=torch.float32).cpu()
             qf.append(features)
             q_pids.extend(pids)
             q_camids.extend(camids)
@@ -512,13 +528,13 @@ def test(
         gf, g_pids, g_camids = [], [], []
         for batch_idx, (imgs, pids, camids, _) in enumerate(galleryloader):
             if use_gpu:
-                imgs = imgs.cuda(non_blocking=True)
+                imgs = imgs.cuda(non_blocking=True).to(memory_format=torch.channels_last)
 
             end = time.time()
             features = model(imgs)
             batch_time.update(time.time() - end)
 
-            features = features.float().data.cpu()
+            features = features.to(dtype=torch.float32).cpu()
             gf.append(features)
             g_pids.extend(pids)
             g_camids.extend(camids)
@@ -544,13 +560,16 @@ def test(
         f"=> BatchTime(s)/BatchSize(img): {batch_time.avg:.3f}/{args.test_batch_size}"
     )
 
-    m, n = qf.size(0), gf.size(0)
-    distmat = (
-        torch.pow(qf, 2).sum(dim=1, keepdim=True).expand(m, n)
-        + torch.pow(gf, 2).sum(dim=1, keepdim=True).expand(n, m).t()
-    )
-    distmat.addmm_(qf, gf.t(), beta=1, alpha=-2)
-    distmat = distmat.numpy()
+    if use_gpu:
+        distmat = torch.cdist(qf.cuda(), gf.cuda()).cpu().numpy()
+    else:
+        m, n = qf.size(0), gf.size(0)
+        distmat = (
+            torch.pow(qf, 2).sum(dim=1, keepdim=True).expand(m, n)
+            + torch.pow(gf, 2).sum(dim=1, keepdim=True).expand(n, m).t()
+        )
+        distmat.addmm_(qf, gf.t(), beta=1, alpha=-2)
+        distmat = distmat.numpy()
 
     print("Computing CMC and mAP")
     # cmc, mAP = evaluate(distmat, q_pids, g_pids, q_camids, g_camids, args.target_names)

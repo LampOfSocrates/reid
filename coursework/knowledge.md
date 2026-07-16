@@ -84,22 +84,22 @@ Input → CLIP ViT-B/32 (frozen, vit_base_patch32_clip_224)
 `clip_senet_v3_ibn_supcon` — the most evolved variant.
 
 ```
-Input → ResNet-50-IBN-a (torchreid, ImageNet+IBN pretrained) → f_app ∈ ℝ^2048
-      → ViT-Tiny/16 (timm, ImageNet pretrained)              → f_sem ∈ ℝ^192
-                                              AFEM(192) on f_sem  ↓
-                                                              residual SE: x*σ(W2 ReLU(W1 x))+x
-                                                              concat 2048 + 192 = 2240
-                                                              Linear(2240→512) + BNNeck + Linear(512, num_classes)
+Input → ConvNeXt-small (timm, ImageNet pretrained)  → f_app ∈ ℝ^768
+      → ViT-Tiny/16 (timm, ImageNet pretrained)     → f_sem ∈ ℝ^192
+                                      AFEM(192) on f_sem  ↓
+                                                      residual SE: x*σ(W2 ReLU(W1 x))+x
+                                                      concat 768 + 192 = 960
+                                                      Linear(960→512) + BNNeck + Linear(512, num_classes)
 
 Aux loss → SupConLoss on the 512-d feature, weight 0.5, T=0.07
 ```
 
 | Block | Detail |
 |---|---|
-| Appearance backbone | `torchreid.models.build_model("resnet50_ibn_a")` — IBN-Net mixes Instance Norm + Batch Norm in early layers, robust to camera-style shift. Output 2048-d after avg-pool. |
+| Appearance backbone | `timm.create_model("convnext_small")` — ConvNeXt-small, ImageNet pretrained, 768-d pooled output. Replaces the previous ResNet-50-IBN-a; no longer requires torchreid. |
 | Semantic backbone | `timm.create_model("vit_tiny_patch16_224")` — 192-d CLS feature. |
 | AFEM(192) | `Linear(192→24) → ReLU → Linear(24→192) → Sigmoid`, **with residual** (`x*attn(x) + x`) — differs from v2 (which has no residual). Reduction 8:1. |
-| Fusion | concat(2048, 192) = 2240 → Linear → 512. |
+| Fusion | concat(768, 192) = 960 → Linear → 512. |
 | Aux loss | **SupConLoss** (Khosla et al., NeurIPS 2020): batch-wise contrastive loss using identity labels as positives. Temperature 0.07, weight 0.5. |
 | Hook | `model.aux_loss(features, pids)` is called by [main.py](coursework/main.py) (lines 412-413) and added to `lambda_xent*xent + lambda_htri*htri`. |
 
@@ -107,19 +107,71 @@ Aux loss → SupConLoss on the 512-d feature, weight 0.5, T=0.07
 
 ## 3. Comparison summary (this repo)
 
-| Model | Backbone(s) | Input HxW | Pretraining | Embedding | Params (approx.) | Training output | Aux signal |
-|---|---|---|---|---|---|---|---|
-| `resnet50_fc512` | ResNet-50 | 256×128 default* | ImageNet-1k | 512 | ~25M | logits, v | — |
-| `mobilenet_v3_small` | MBv3-small | 256×128 | ImageNet-1k | 576 | ~2.5M | logits, v | — |
-| `swin_t_fc512` (timm) | Swin-T | **224×224** | ImageNet-1k | 512 | ~28M + heads | logits, reduced_feat | — |
-| `swin_t_custom` (timm) | Swin-T | 224×224 | ImageNet-1k | 768 | ~28M + heads | logits, global_feat | — |
-| `clip_senet_v1_dual` | ResNet-50 + ViT-Tiny | 224×224 | ImageNet-1k | 512 (from 2240) | ~30M | logits, feat | — |
-| `clip_senet_v2_frozen` | CLIP ViT-B/32 (frozen) | 224×224 (forced) | CLIP (LAION-style) | 512 (from 768) | ~88M backbone frozen, ~0.5M trainable | logits, feat | AFEM gate |
-| `clip_senet_v3_ibn_supcon` | ResNet-50-IBN-a + ViT-Tiny | 224×224 | ImageNet+IBN, ImageNet | 512 (from 2240) | ~30M | logits, feat | **SupCon** + AFEM |
-
 \* args defaults are `--height 128 --width 256` but [train.sh](coursework/train.sh) overrides with `--height 224 --width 224` for Swin/CLIP compatibility.
+Dead code removed: `tvmodels.py` previously contained a torchvision-based `swin_t_fc512` that was never imported — the registered model is always the timm version from `timm_model.py`.
 
-### 3.1 Embedding-dimension rationale
+### 3.0 Complete model inventory
+
+| Model | Source file | Backbone(s) | Trainable params | Feature dim | ReID head | Aux signal |
+|---|---|---|---|---|---|---|
+| `resnet18` | resnet.py | ResNet-18, last_stride=2 | ~11M | 512 | classifier only | — |
+| `resnet18_fc512` | resnet.py | ResNet-18, **last_stride=1** | ~11M | 512 (FC) | FC + BN + classifier | — |
+| `resnet34` | resnet.py | ResNet-34, last_stride=2 | ~21M | 512 | classifier only | — |
+| `resnet34_fc512` | resnet.py | ResNet-34, **last_stride=1** | ~21M | 512 (FC) | FC + BN + classifier | — |
+| `resnet50` | resnet.py | ResNet-50, last_stride=2 | ~25M | 2048 | classifier only | — |
+| `resnet50_fc512` | resnet.py | ResNet-50, **last_stride=1** | ~25M | 512 (FC) | FC + BN + classifier | — |
+| `mobilenet_v3_small` | tvmodels.py | MobileNet-V3-S | ~2.5M | 576 | bare linear, no BNNeck | — |
+| `swin_t_fc512` | timm_model.py | Swin-T | ~28M | 512 | FC-reduce + BNNeck | — |
+| `swin_t_custom` | timm_model.py | Swin-T | ~28M | 768 (native) | BNNeck only | — |
+| `deit_s_fc512` | timm_model.py | DeiT-S/16 | ~22M | 512 | FC-reduce + BNNeck | — |
+| `clip_senet_v1_dual` | clip_senet.py | ResNet-50 + TinyViT-192 (both trained) | ~30M | 512 (from 2240) | concat → FC + BNNeck | — |
+| `clip_senet_v2_frozen` | clip_senet.py | CLIP ViT-B/32 (**86M frozen**) | ~2M active | 512 (from 768) | SE-AFEM + FC + BNNeck | AFEM gate |
+| `clip_senet_v3_ibn_supcon` | clip_senet_v3.py | ConvNeXt-small + TinyViT-192 | ~56M | 512 (from 960) | AFEM + concat + FC + BNNeck | **SupCon** + AFEM |
+| `clip_senet_v4` | clip_senet_v4.py | ConvNeXt-small + TinyCLIP-8M (**7M frozen**) | ~51M active | 2048 | grouped AFEM + add-fusion | **SupCon** |
+
+### 3.1 Ranking — training speed (fastest → slowest)
+
+1. **`mobilenet_v3_small`** — smallest backbone, single stream, no BNNeck overhead
+2. **`resnet18` / `resnet18_fc512`** — 11M, fast convergence
+3. **`clip_senet_v2_frozen`** — 86M ViT but fully frozen; only ~2M params backprop
+4. **`resnet34` / `resnet34_fc512`**
+5. **`resnet50` / `resnet50_fc512`** — `_fc512` marginally slower (extra FC + BN in forward)
+6. **`deit_s_fc512`** — 22M, single stream ViT, straightforward
+7. **`swin_t_fc512` / `swin_t_custom`** — window attention adds overhead; `swin_t_custom` skips the reduce FC so marginally faster per step
+8. **`clip_senet_v1_dual`** — two full forward passes (ResNet-50 + TinyViT) per batch
+9. **`clip_senet_v3_ibn_supcon`** — same dual-stream cost plus SupCon (O(B²) similarity matrix per step)
+10. **`clip_senet_v4`** — ConvNeXt-small (~50M) is heavier than ResNet-50; SupCon overhead; TinyCLIP partially frozen helps but overall forward cost is high
+
+### 3.2 Ranking — vehicle ReID suitability (best → worst)
+
+Key factors: IBN normalization (cross-camera style shift), fine-grained discriminability, metric learning quality, pre-training relevance.
+
+1. **`clip_senet_v4`** — ConvNeXt-small + grouped AFEM (paper-faithful G=32) + TinyCLIP semantics + SupCon. Most complete design; note IBN cross-camera robustness no longer present (torchreid removed).
+2. **`clip_senet_v3_ibn_supcon`** — ConvNeXt-small + TinyViT dual-stream + SupCon. Strong design despite the "ibn" in the name being a misnomer after the torchreid backbone was replaced.
+3. **`deit_s_fc512`** — Global attention handles viewpoint variation well; BNNeck decouples metric/classification spaces. Published VeRi-776: 76.3 mAP / 95.5 R1 (TransReID Table 2).
+4. **`swin_t_fc512`** — Hierarchical features useful for multi-scale vehicle parts; BNNeck + 512-d bottleneck enforces the BoT decoupling properly.
+5. **`swin_t_custom`** — Same backbone; skips reduce layer so BNNeck operates on native 768-d — loses compact embedding advantage.
+6. **`clip_senet_v1_dual`** — Dual-stream is the right idea, but plain ResNet-50 (no IBN) and TinyViT (not genuinely CLIP-trained) weaken it vs. v3.
+7. **`clip_senet_v2_frozen`** — CLIP ViT-B/32 has strong priors but the frozen backbone never adapts to vehicle appearance; only the tiny SE head trains.
+8. **`resnet50_fc512`** — Solid baseline; `last_stride=1` preserves spatial detail for part matching. No domain-specific design.
+9. **`resnet50`** — `last_stride=2` discards spatial detail unnecessarily; strictly worse than `resnet50_fc512` for ReID.
+10. **`resnet34_fc512`** — Less capacity than ResNet-50; `last_stride=1` helps but backbone is the bottleneck.
+11. **`resnet34`** — stride-2 version; weaker than `resnet34_fc512`.
+12. **`resnet18_fc512`** — Too shallow for fine-grained inter-class discrimination.
+13. **`resnet18`** — stride-2, shallowest; worst of the ResNets.
+14. **`mobilenet_v3_small`** — Designed for mobile inference; no BNNeck, no metric learning head; not suitable for accuracy-critical ReID.
+
+### 3.3 Quick-pick guide
+
+| Goal | Best choice |
+|---|---|
+| Maximum accuracy | `clip_senet_v4` |
+| Best accuracy per GPU-hour | `clip_senet_v3_ibn_supcon` |
+| Clean fast baseline | `deit_s_fc512` |
+| Lightest trainable CNN baseline | `resnet50_fc512` (not `resnet50`) |
+| Speed / sanity-check run | `resnet18_fc512` |
+
+### 3.4 Embedding-dimension rationale
 
 - **2048-d ResNet-50** pooled output is the standard CNN feature size.
 - **192-d ViT-Tiny** is a small, semantic prior — TinyCLIP-style.
@@ -263,7 +315,7 @@ This section consolidates **only what the downloaded papers say** about each of 
 | VeRi-776 numbers in this paper | **None** — original ResNet paper benchmarks ImageNet/CIFAR/COCO only |
 | Best VeRi-776 mAP / Rank-1 (from other papers in folder) | **76.4 / 95.2** — TransReID Table 2 (ResNet-50 backbone, 256×256 input), [2102.04378_TransReID_He2021.pdf](coursework/papers/2102.04378_TransReID_He2021.pdf) p. 6 |
 | Other ResNet variants on VeRi-776 (TransReID Table 2, p. 6) | ResNet-101 → 76.9 / 95.2 · ResNet-152 → 77.1 / 95.9 · ResNeSt-50 → 77.6 / 96.2 · ResNeSt-200 → 77.9 / 96.4 |
-| ResNet-50-IBN on VeRi-776 (CLIP-SENet Table VI, p. 7 of [2502.16815_CLIP-SENet_2025.pdf](coursework/papers/2502.16815_CLIP-SENet_2025.pdf)) | **91.1 mAP / 97.4 R1 / 98.6 R5** (with full SEM + AFEM head, not pure ResNet-50) |
+| ResNet-50-IBN on VeRi-776 (CLIP-SENet Table VI, p. 7 of [2502.16815_CLIP-SENet_2025.pdf](coursework/papers/2502.16815_CLIP-SENet_2025.pdf)) | **91.1 mAP / 97.4 R1 / 98.6 R5** (with full SEM + AFEM head, not pure ResNet-50). Note: our v3/v4 now use ConvNeXt-small instead of IBN-Net — this published number is no longer directly comparable to our backbone. |
 | Recipe (BoT, p. 2 §2 + p. 3-6 §3, [1903.07071_BoT_Luo2019.pdf](coursework/papers/1903.07071_BoT_Luo2019.pdf)) | Adam lr **3.5e-4** with **MultiStep ×0.1 at epoch 40, 70**, **120 epochs** total · **Warmup**: linear 3.5e-5 → 3.5e-4 over first 10 epochs (§3.1, p. 3) · **last_stride=1** (§3.4, p. 4) · **BNNeck** before classifier, classifier with no bias (§3.5, p. 4-5) · **Random Erasing** p=0.5, S∈(0.02, 0.4), r∈(0.3, 3.33) (§3.2, p. 4) · **Label smoothing** ε=0.1 (§3.3, p. 4) · **Triplet margin** α=0.3 (§3.6, p. 5) · **Center loss** weight β=5e-4 (§3.6, p. 6) · **P=16, K=4**, batch=64 (§2 step 2, p. 2) · Image **256×128** for person; image-size ablation (Table 6, p. 7) shows 224×224 / 384×128 / 384×192 all within ±0.5 mAP |
 | TransReID's ResNet-50 baseline recipe for VeRi-776 (§4.2, p. 5-6) | Image **256×256** (vehicles), aug = h-flip + pad + random crop + random erasing, batch 64 (4 imgs/ID), **SGD** mom=0.9, wd=1e-4, **lr=0.008** with cosine decay, FP16, single V100 |
 

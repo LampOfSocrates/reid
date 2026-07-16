@@ -1,0 +1,4 @@
+./scripts/train.sh swin_t_fc512 --lr 0.008 --bs 64 --max-epoch 30 --data-fraction 1.0 > train_swin_t_fc512_ls.out 2>&1;
+./scripts/train.sh swin_t_fc512 --lr 0.008 --bs 64 --max-epoch 30 --data-fraction 1.0 --random-erase > train_swin_t_fc512_ls_re.out 2>&1;
+./scripts/train.sh swin_t_fc512 --lr 0.008 --bs 64 --max-epoch 30 --data-fraction 1.0 --color-jitter > train_swin_t_fc512_ls_cj.out 2>&1;
+./scripts/train.sh swin_t_fc512 --lr 0.008 --bs 64 --max-epoch 30 --data-fraction 1.0 --random-erase --color-jitter > train_swin_t_fc512_ls_re_cj.out 2>&1;

@@ -5,3 +5,7 @@ __pycache__/
 data/*
 logs/*
 .claude/
+
+Solutions/
+scripts/aug sweep/
+scripts/lr sweep/

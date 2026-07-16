@@ -1,16 +1,18 @@
 # GPU: NVIDIA GeForce RTX 5070 Ti (Blackwell, sm_120) -> requires CUDA >= 12.8
-# Install with:
-#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu128
-# For CPU-only: replace the torch/torchvision pins below with plain `torch==2.11.0` and `torchvision==0.26.0`.
-
-torch==2.11.0+cu128
-torchvision==0.26.0
+# Full install (run in order):
+#   1. pip install numpy Cython
+#   2. pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
+#   3. pip install -r requirements.txt
+# torch/torchvision are intentionally omitted here — they must come from the nightly channel above.
 timm==1.0.26
+transformers
+scipy
+opencv-python
 numpy==2.4.4
 pandas==3.0.2
 Pillow==12.2.0
 matplotlib==3.10.8
 seaborn==0.13.2
 tqdm==4.67.3
-ipython==9.12.0
+ipython==8.39.0
 gdown==6.0.0

@@ -2,26 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import timm
-import torchreid
 
 
-class _ResNet50IBN_A_Backbone(nn.Module):
-    # torchreid ships resnet50_ibn_a; timm doesn't. Wrap it to emit pooled 2048-d features.
+class _ConvNeXtSmall_Backbone(nn.Module):
     def __init__(self, pretrained: bool = True):
         super().__init__()
-        self._m = torchreid.models.build_model(
-            "resnet50_ibn_a", num_classes=1, pretrained=pretrained, loss="triplet"
-        )
+        self._m = timm.create_model("convnext_small", pretrained=pretrained, num_classes=0)
 
     def forward(self, x):
-        m = self._m
-        x = m.relu(m.bn1(m.conv1(x)))
-        x = m.maxpool(x)
-        x = m.layer1(x)
-        x = m.layer2(x)
-        x = m.layer3(x)
-        x = m.layer4(x)
-        return m.avgpool(x).flatten(1)
+        return self._m(x)  # [B, 768]
 
 __all__ = ["clip_senet_v3_ibn_supcon"]
 
@@ -75,7 +64,7 @@ class SupConLoss(nn.Module):
         logits_mask = torch.scatter(
             torch.ones_like(mask),
             1,
-            torch.arange(labels.shape[0]).view(-1, 1).to(device),
+            torch.arange(labels.shape[0], device=device).view(-1, 1),
             0,
         )
         mask = mask * logits_mask
@@ -98,13 +87,13 @@ class CLIP_SENet_V3_IBN_SupCon(nn.Module):
     ):
         super().__init__()
         self.loss = loss
-        self.app_net = _ResNet50IBN_A_Backbone(pretrained=pretrained)
+        self.app_net = _ConvNeXtSmall_Backbone(pretrained=pretrained)
         self.sem_net = timm.create_model(
             "vit_tiny_patch16_224", pretrained=pretrained, num_classes=0
         )
         self.afem = AFEM(192)
 
-        self.reduce = nn.Linear(2048 + 192, 512)
+        self.reduce = nn.Linear(768 + 192, 512)
         self.bn_neck = nn.BatchNorm1d(512)
         self.bn_neck.bias.requires_grad_(False)
         self.classifier = nn.Linear(512, num_classes, bias=False)
@@ -115,10 +104,18 @@ class CLIP_SENet_V3_IBN_SupCon(nn.Module):
 
         self._supcon = SupConLoss(temperature=supcon_temperature)
         self._supcon_weight = supcon_weight
+        self._sem_stream = torch.cuda.Stream() if torch.cuda.is_available() else None
 
     def forward(self, x):
         f_app = self.app_net(x)
-        f_sem = self.afem(self.sem_net(x))
+
+        if self._sem_stream is not None:
+            with torch.cuda.stream(self._sem_stream):
+                f_sem = self.afem(self.sem_net(x))
+            torch.cuda.current_stream().wait_stream(self._sem_stream)
+        else:
+            f_sem = self.afem(self.sem_net(x))
+
         combined = torch.cat([f_app, f_sem], dim=1)
         feat = self.reduce(combined)
         bn_feat = self.bn_neck(feat)

@@ -51,8 +51,8 @@ def eval_vehicleid(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         # reference: https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Average_precision
         num_rel = raw_cmc.sum()
         tmp_cmc = raw_cmc.cumsum()
-        tmp_cmc = [x / (i + 1.0) for i, x in enumerate(tmp_cmc)]
-        tmp_cmc = np.asarray(tmp_cmc) * raw_cmc
+        tmp_cmc = tmp_cmc / (np.arange(len(tmp_cmc)) + 1.0)
+        tmp_cmc = tmp_cmc * raw_cmc
         AP = tmp_cmc.sum() / num_rel
         all_AP.append(AP)
 
@@ -111,8 +111,8 @@ def eval_veri(distmat, q_pids, g_pids, q_camids, g_camids, max_rank):
         # reference: https://en.wikipedia.org/wiki/Evaluation_measures_(information_retrieval)#Average_precision
         num_rel = raw_cmc.sum()
         tmp_cmc = raw_cmc.cumsum()
-        tmp_cmc = [x / (i + 1.0) for i, x in enumerate(tmp_cmc)]
-        tmp_cmc = np.asarray(tmp_cmc) * raw_cmc
+        tmp_cmc = tmp_cmc / (np.arange(len(tmp_cmc)) + 1.0)
+        tmp_cmc = tmp_cmc * raw_cmc
         AP = tmp_cmc.sum() / num_rel
         all_AP.append(AP)
 
